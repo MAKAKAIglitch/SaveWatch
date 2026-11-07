@@ -1,5 +1,17 @@
 # Building SaveWatch
 
+## Updating source files from GitHub
+
+For an existing Git clone of the official repository:
+
+1. Double-click `update-sources.bat`.
+2. The updater fetches the latest `main` branch and fast-forwards the local working copy.
+3. Run `build.bat` if you also want to compile the updated sources.
+
+Requirements: Git for Windows and Windows PowerShell 5.1. The updater only works in a clone of `MAKAKAIglitch/SaveWatch` on the `main` branch. A ZIP-extracted folder is not a Git clone; clone the repository with Git to use automatic updates.
+
+The updater checks the remote URL and branch, and stops if it finds local modifications or local-only commits. It never uses a hard reset and does not overwrite uncommitted work.
+
 ## Windows: one-click build
 
 1. Download the repository using **Code → Download ZIP**, or clone it with Git.
@@ -23,7 +35,7 @@ The included Gradle Wrapper downloads the project's pinned Gradle distribution a
 The resulting mod is placed in:
 
 ```
-build\libs\savewatch-0.1.0.jar
+build\\libs\\savewatch-0.1.0.jar
 ```
 
 The exact filename may change when the mod version changes. Sources JARs are not the file to install in Minecraft.
@@ -62,7 +74,7 @@ Python is not needed to compile or run the Minecraft mod. It is used only for of
 To summarize reports on Windows:
 
 ```bat
-analyze.bat logs\savewatch
+analyze.bat logs\\savewatch
 ```
 
 Python 3.10 or newer is recommended. The analyzer uses only the standard library and does not install packages.
