@@ -237,7 +237,7 @@ public final class HtmlReportGenerator {
             appendMeta(out, snapshot, "deadlockedThreadCount");
             String jfrFile = snapshot.values.getOrDefault("jfrFile", "unavailable");
             if (jfrFile.endsWith(".jfr")) {
-                out.append("<span>jfrFile: <b><a href=\\\"").append(escape(jfrFile)).append("\\">")
+                out.append("<span>jfrFile: <b><a href=\"").append(escape(jfrFile)).append("\">")
                         .append(escape(jfrFile)).append("</a></b></span>");
             } else {
                 appendMeta(out, snapshot, "jfrFile");
