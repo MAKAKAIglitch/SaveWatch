@@ -3,7 +3,6 @@ package dev.savewatch.monitor;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.attribute.FileTime;
 import java.util.Comparator;
 import java.text.ParseException;
 import java.time.Duration;
@@ -80,14 +79,7 @@ public final class JfrRecorder {
         try (var files = Files.list(directory)) {
             var exports = files.filter(path -> Files.isRegularFile(path)
                             && path.getFileName().toString().toLowerCase().endsWith(".jfr"))
-                    .sorted(Comparator.comparing((Path path) -> {
-                        try {
-                            FileTime modified = Files.getLastModifiedTime(path);
-                            return modified.toMillis();
-                        } catch (IOException exception) {
-                            return Long.MIN_VALUE;
-                        }
-                    }).reversed())
+                    .sorted(Comparator.comparing((Path path) -> path.getFileName().toString()).reversed())
                     .toList();
             for (int index = Math.max(1, maxExports); index < exports.size(); index++) {
                 try {
