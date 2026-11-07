@@ -13,6 +13,7 @@
 
 ### Stall watchdog
 - Watches server ticks, client ticks, and render frames independently.
+- Maintains rolling 100-tick server statistics (estimated TPS, average/p95/maximum MSPT) and 120-frame client statistics (average FPS, 1% low, and p99 frame time).
 - A low-priority daemon watchdog checks progress every 200 ms.
 - Captures repeated snapshots while a stall is still happening.
 - Uses a bounded background queue so simultaneous server/client/render events do not silently overwrite one another or block game threads.
@@ -36,7 +37,7 @@
 - Writes snapshots to `logs/savewatch/`.
 - Automatically generates a self-contained offline HTML report at `logs/savewatch/index.html` after a monitored stall ends.
 - The HTML report highlights detected deadlocks, JFR export status, heap/GC history, repeated stack frames, and potentially involved mods.
-- `/savewatch status` — current server/client/render timing, snapshot queue depth, and heap summary.
+- `/savewatch status` — current server/client/render timing, rolling TPS/MSPT/FPS statistics, snapshot queue depth, and heap summary.
 - `/savewatch dump` — queue a manual JVM/thread snapshot.
 - `/savewatch report` — regenerate the HTML report from existing snapshots.
 
