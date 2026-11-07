@@ -41,11 +41,34 @@ jobs:
           path: build/libs/*.jar
           if-no-files-found: error
 
+  test-python-tools:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Run analyzer unit tests
+        run: python -m unittest discover -s tests -v
+
   validate-windows-builder:
     runs-on: windows-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Run analyzer unit tests
+        shell: powershell
+        run: python -m unittest discover -s tests -v
 
       - name: Validate PowerShell builder syntax
         shell: powershell
