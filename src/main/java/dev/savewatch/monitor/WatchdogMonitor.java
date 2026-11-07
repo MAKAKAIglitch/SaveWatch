@@ -29,6 +29,8 @@ import java.util.concurrent.atomic.AtomicLongArray;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.ClickEvent;
+import net.minecraft.network.chat.Style;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
 import org.slf4j.Logger;
@@ -175,6 +177,15 @@ public final class WatchdogMonitor {
                     context.getSource().sendFailure(Component.literal(
                             "SaveWatch: snapshot queue is full; try again in a moment."));
                     return 0;
+                }))
+                .then(Commands.literal("links").executes(context -> {
+                    Path directory = Path.of("logs", "savewatch").toAbsolutePath();
+                    context.getSource().sendSuccess(() -> Component.literal("SaveWatch: "), false);
+                    sendFileLink(context.getSource(), "Открыть HTML-отчёт", directory.resolve("index.html"));
+                    sendFileLink(context.getSource(), "Открыть AI-сводку", directory.resolve("ai-summary.md"));
+                    Path latest = latestSnapshot(directory);
+                    if (latest != null) sendFileLink(context.getSource(), "Открыть последний дамп", latest);
+                    return 1;
                 }))
                 .then(Commands.literal("ai").executes(context -> {
                     try {
@@ -566,6 +577,28 @@ public final class WatchdogMonitor {
         } catch (RuntimeException exception) {
             REPORT_WRITING.set(false);
             LOGGER.error("Could not start SaveWatch HTML report worker.", exception);
+        }
+    }
+
+    private static void sendFileLink(CommandSourceStack source, String label, Path file) {
+        if (!Files.isRegularFile(file)) return;
+        Component link = Component.literal("[" + label + "]")
+                .withStyle(Style.EMPTY.withUnderlined(true)
+                        .withClickEvent(new ClickEvent(ClickEvent.Action.OPEN_FILE, file.toAbsolutePath().toString())));
+        source.sendSuccess(() -> link, false);
+    }
+
+    private static Path latestSnapshot(Path directory) {
+        if (!Files.isDirectory(directory)) return null;
+        try (var files = Files.list(directory)) {
+            return files.filter(Files::isRegularFile)
+                    .filter(path -> path.getFileName().toString().endsWith(".txt"))
+                    .max(java.util.Comparator.comparingLong(path -> {
+                        try { return Files.getLastModifiedTime(path).toMillis(); }
+                        catch (IOException ignored) { return 0L; }
+                    })).orElse(null);
+        } catch (IOException ignored) {
+            return null;
         }
     }
 
