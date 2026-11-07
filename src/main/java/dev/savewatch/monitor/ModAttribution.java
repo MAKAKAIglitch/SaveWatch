@@ -4,7 +4,6 @@ import java.io.IOException;
 import java.lang.management.ThreadInfo;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -63,7 +62,7 @@ public final class ModAttribution {
 
         return hits.values().stream()
                 .sorted(Comparator.comparingInt((MutableEvidence hit) -> hit.triggerFrames).reversed()
-                        .thenComparingInt(hit -> hit.topTriggerFrames).reversed()
+                        .thenComparing(Comparator.comparingInt((MutableEvidence hit) -> hit.topTriggerFrames).reversed())
                         .thenComparing(hit -> hit.modId))
                 .limit(40)
                 .map(MutableEvidence::freeze)
