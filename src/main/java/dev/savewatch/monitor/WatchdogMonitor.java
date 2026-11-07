@@ -122,7 +122,8 @@ public final class WatchdogMonitor {
                     return 1;
                 }))
                 .then(Commands.literal("dump").executes(context -> {
-                    queueSnapshot("MANUAL_COMMAND", currentTickDurationMs(), "command", null);
+                    queueSnapshot("MANUAL_COMMAND", currentTickDurationMs(), "command",
+                            serverThread != null ? serverThread : (clientThread != null ? clientThread : renderThread));
                     context.getSource().sendSuccess(
                             () -> Component.literal("SaveWatch: diagnostic snapshot queued. Check logs/savewatch/."),
                             false);
