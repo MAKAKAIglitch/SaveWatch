@@ -19,6 +19,9 @@ thresholdMs=2000
 javaVersion=21
 heapUsedMiB=4096
 heapMaxMiB=8192
+deadlockDetected=true
+deadlockedThreadCount=2
+jfrFile=savewatch-sample.jfr
 
 [GC]
 G1 Young Generation count=4 totalMs=120
@@ -73,6 +76,8 @@ class AnalyzeReportsTests(unittest.TestCase):
         self.assertIn("Reports read: **2**", summary)
         self.assertIn("Longest captured stall: **12000 ms**", summary)
         self.assertIn("example.save.ModSaver.save", summary)
+        self.assertIn("Snapshots with detected JVM deadlocks: **1**", summary)
+        self.assertIn("Snapshots with a JFR export: **1**", summary)
         self.assertIn("not proof of a root cause", summary)
 
 
