@@ -103,7 +103,7 @@ public final class WatchdogMonitor {
         watchdog.setPriority(Thread.NORM_PRIORITY - 1);
         watchdog.start();
 
-        LOGGER.info("SaveWatch 0.6.0 started. Server/client stall threshold={}ms, repeat={}ms.",
+        LOGGER.info("SaveWatch 0.7.0 started. Server/client stall threshold={}ms, repeat={}ms.",
                 stallThresholdMs, repeatIntervalMs);
     }
 
@@ -334,7 +334,7 @@ public final class WatchdogMonitor {
         long currentServerMs = activeDurationMs(SERVER_TICK_STARTED_NANOS.get(), now);
         long currentClientMs = activeDurationMs(CLIENT_TICK_STARTED_NANOS.get(), now);
         long currentRenderMs = activeDurationMs(RENDER_FRAME_STARTED_NANOS.get(), now);
-        if (language.equals("ru")) return "SaveWatch 0.6.0 | тиков сервера=" + TICK_COUNT.get()
+        if (language.equals("ru")) return "SaveWatch 0.7.0 | тиков сервера=" + TICK_COUNT.get()
                 + " | последний тик сервера=" + LAST_SERVER_TICK_NANOS.get() / 1_000_000L + " мс"
                 + " | последний тик клиента=" + LAST_CLIENT_TICK_NANOS.get() / 1_000_000L + " мс"
                 + " | последний кадр=" + LAST_RENDER_FRAME_NANOS.get() / 1_000_000L + " мс"
@@ -345,7 +345,7 @@ public final class WatchdogMonitor {
                 + " | TPS/MSPT=" + serverTimingSummary().replace(" | ", "")
                 + " | FPS=" + renderTimingSummary().replace(" | ", "")
                 + " | память=" + formatMiB(used) + "/" + formatMiB(runtime.maxMemory()) + " МиБ";
-        return "SaveWatch 0.6.0 | observed server ticks=" + TICK_COUNT.get()
+        return "SaveWatch 0.7.0 | observed server ticks=" + TICK_COUNT.get()
                 + " | last server tick=" + LAST_SERVER_TICK_NANOS.get() / 1_000_000L + "ms"
                 + " | last client tick=" + LAST_CLIENT_TICK_NANOS.get() / 1_000_000L + "ms"
                 + " | last render frame=" + LAST_RENDER_FRAME_NANOS.get() / 1_000_000L + "ms"
@@ -404,7 +404,7 @@ public final class WatchdogMonitor {
                                       Thread targetThread, long captureStarted, String jfrFile) {
         StringBuilder out = new StringBuilder(32_768);
         out.append("SaveWatch diagnostic report\n")
-                .append("version=0.6.0\n")
+                .append("version=0.7.0\n")
                 .append("reason=").append(reason).append('\n')
                 .append("trigger=").append(trigger).append('\n')
                 .append("timestamp=").append(LocalDateTime.now()).append('\n')
@@ -607,7 +607,7 @@ public final class WatchdogMonitor {
                 properties.setProperty("configVersion", "4");
                 try (var writer = Files.newBufferedWriter(config, StandardCharsets.UTF_8,
                         StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)) {
-                    properties.store(writer, "SaveWatch 0.6.0 settings");
+                    properties.store(writer, "SaveWatch 0.7.0 settings");
                 }
             }
             try (var reader = Files.newBufferedReader(config, StandardCharsets.UTF_8)) {
@@ -656,7 +656,7 @@ public final class WatchdogMonitor {
             if (configChanged) {
                 try (var writer = Files.newBufferedWriter(config, StandardCharsets.UTF_8,
                         StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE)) {
-                    properties.store(writer, "SaveWatch 0.6.0 settings");
+                    properties.store(writer, "SaveWatch 0.7.0 settings");
                 }
             }
 
