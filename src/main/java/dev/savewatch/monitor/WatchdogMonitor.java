@@ -295,6 +295,27 @@ public final class WatchdogMonitor {
                 averageFps, lowOnePercentFps, p99Ms, samples.length);
     }
 
+    private static String metric(AtomicLongArray history, int kind) {
+        long[] samples = timingSamples(history);
+        if (samples.length == 0) return "0";
+        Arrays.sort(samples);
+        double total = 0;
+        for (long sample : samples) total += sample / 1_000_000.0;
+        double avg = total / samples.length;
+        double p95 = samples[Math.max(0, (int) Math.ceil(samples.length * .95) - 1)] / 1_000_000.0;
+        double max = samples[samples.length - 1] / 1_000_000.0;
+        double p99 = samples[Math.max(0, (int) Math.ceil(samples.length * .99) - 1)] / 1_000_000.0;
+        return String.format(Locale.ROOT, "%.2f", switch (kind) {
+            case 0 -> avg <= 0 ? 20.0 : Math.min(20.0, 1000.0 / avg);
+            case 1 -> avg;
+            case 2 -> p95;
+            case 3 -> max;
+            case 4 -> avg <= 0 ? 0 : 1000.0 / avg;
+            case 5 -> p99 <= 0 ? 0 : 1000.0 / p99;
+            default -> 0;
+        });
+    }
+
     private static String statusText() {
         Runtime runtime = Runtime.getRuntime();
         long used = runtime.totalMemory() - runtime.freeMemory();
@@ -302,7 +323,18 @@ public final class WatchdogMonitor {
         long currentServerMs = activeDurationMs(SERVER_TICK_STARTED_NANOS.get(), now);
         long currentClientMs = activeDurationMs(CLIENT_TICK_STARTED_NANOS.get(), now);
         long currentRenderMs = activeDurationMs(RENDER_FRAME_STARTED_NANOS.get(), now);
-        return "SaveWatch 0.4.0 | observed server ticks=" + TICK_COUNT.get()
+        if (language.equals("ru")) return "SaveWatch 0.5.0 | тиков сервера=" + TICK_COUNT.get()
+                + " | последний тик сервера=" + LAST_SERVER_TICK_NANOS.get() / 1_000_000L + " мс"
+                + " | последний тик клиента=" + LAST_CLIENT_TICK_NANOS.get() / 1_000_000L + " мс"
+                + " | последний кадр=" + LAST_RENDER_FRAME_NANOS.get() / 1_000_000L + " мс"
+                + (currentServerMs > 0 ? " | текущий тик сервера=" + currentServerMs + " мс" : "")
+                + (currentClientMs > 0 ? " | текущий тик клиента=" + currentClientMs + " мс" : "")
+                + (currentRenderMs > 0 ? " | текущий кадр=" + currentRenderMs + " мс" : "")
+                + " | очередь дампов=" + SNAPSHOT_WRITER.getQueue().size()
+                + " | TPS/MSPT=" + serverTimingSummary().replace(" | ", "")
+                + " | FPS=" + renderTimingSummary().replace(" | ", "")
+                + " | память=" + formatMiB(used) + "/" + formatMiB(runtime.maxMemory()) + " МиБ";
+        return "SaveWatch 0.5.0 | observed server ticks=" + TICK_COUNT.get()
                 + " | last server tick=" + LAST_SERVER_TICK_NANOS.get() / 1_000_000L + "ms"
                 + " | last client tick=" + LAST_CLIENT_TICK_NANOS.get() / 1_000_000L + "ms"
                 + " | last render frame=" + LAST_RENDER_FRAME_NANOS.get() / 1_000_000L + "ms"
@@ -377,7 +409,13 @@ public final class WatchdogMonitor {
                 .append("triggerThreadId=").append(targetThread == null ? -1 : targetThread.getId()).append('\n')
                 .append("thresholdMs=").append(stallThresholdMs).append('\n')
                 .append("jfrFile=").append(jfrFile).append('\n')
-                .append("sparkDetected=").append(SparkCompatibility.isPresent()).append('\n');
+                .append("sparkDetected=").append(SparkCompatibility.isPresent()).append('\n')
+                .append("serverTps=").append(metric(SERVER_TICK_HISTORY, 0)).append('\n')
+                .append("serverMsptAvg=").append(metric(SERVER_TICK_HISTORY, 1)).append('\n')
+                .append("serverMsptP95=").append(metric(SERVER_TICK_HISTORY, 2)).append('\n')
+                .append("serverMsptMax=").append(metric(SERVER_TICK_HISTORY, 3)).append('\n')
+                .append("clientFpsAvg=").append(metric(RENDER_FRAME_HISTORY, 4)).append('\n')
+                .append("clientFps1Low=").append(metric(RENDER_FRAME_HISTORY, 5)).append('\n');
 
         Runtime runtime = Runtime.getRuntime();
         out.append("\n[JVM]\n")
