@@ -48,7 +48,7 @@ public final class JfrRecorder {
      * Returns a short status string suitable for inclusion in a text snapshot.
      */
     public static synchronized String dumpIfDue(Path destination, long minIntervalMs) {
-        if (recording == null || recording.getState() != Recording.State.RUNNING) return "unavailable";
+        if (recording == null || recording.getState() != RecordingState.RUNNING) return "unavailable";
         long now = System.nanoTime();
         if (lastDumpNanos != 0 && now - lastDumpNanos < minIntervalMs * 1_000_000L) {
             return "cooldown";
