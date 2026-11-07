@@ -37,7 +37,7 @@
 - Writes snapshots to `logs/savewatch/`.
 - Enforces a **256 MiB total folder limit** by removing the oldest completed files first; active temporary files are skipped. Change `maxLogSizeMiB` in config.
 - Generates a compact `ai-summary.md` with key timings and links to the full snapshots/JFR files.
-- `/savewatch ai` regenerates the AI summary; `/savewatch links` prints clickable in-game links to the HTML report, AI summary, and newest dump (local single-player worlds).
+- `/savewatch ai` regenerates the AI summary; `/savewatch links` is a client-side command that opens clickable local links to the HTML report, AI summary, and newest dump in single-player/local worlds. Minecraft blocks servers from sending local-file open actions.
 - HTML report is Russian-localized and includes heap, GC, MSPT and FPS graphs plus links to the underlying evidence.
 - Experimental Spark presence detection is optional and dependency-free; SaveWatch still works normally without Spark.
 - Automatically generates a self-contained offline HTML report at `logs/savewatch/index.html` after a monitored stall ends.
