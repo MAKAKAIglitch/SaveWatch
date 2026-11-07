@@ -9,7 +9,7 @@
 - Java: 21
 - Mod ID: `savewatch`
 
-## Features in 0.5.0
+## Features in 0.6.0
 
 ### Stall watchdog
 - Watches server ticks, client ticks, and render frames independently.
@@ -18,6 +18,15 @@
 - Captures repeated snapshots while a stall is still happening.
 - Uses a bounded background queue so simultaneous server/client/render events do not silently overwrite one another or block game threads.
 - Uses collision-resistant snapshot names and reports when the queue is full.
+
+### Mod attribution (0.6.0)
+- Builds a background index of class names found inside loaded mod JARs and associates stack frames with the owning mod.
+- Uses ModLauncher transformer markers as an additional attribution signal.
+- Adds structured per-snapshot evidence: trigger-thread frames, top-five trigger frames, frames from other threads, mod display name, version, and the first matching frame.
+- Ranks candidates across repeated snapshots in the HTML report and AI summary. Repeated appearances in the stalled thread and near the top of its stack increase the investigation priority.
+- Labels results as strong signal, possible connection, or weak signal. These are heuristic confidence labels, never proof that a mod caused the stall.
+- Handles ambiguous classes/packages and multi-mod JARs conservatively; unreadable JARs do not stop snapshot collection.
+- Older 0.5.0 snapshots remain readable; their transformer-marker attribution is retained as a compatibility fallback.
 
 ### JVM and thread diagnostics
 - Captures every live JVM thread, prioritizing the stalled thread.
@@ -98,7 +107,7 @@ The built-in HTML report is generated in Java by the mod; Python is not required
 ## Diagnostic limitations
 
 - A long client tick indicates that the client tick loop stopped progressing; it does not by itself prove that rendering, a mod, or the GPU driver is the root cause.
-- A long server tick does not by itself prove slow disk I/O or a save-system bug.
+- A long server tick does not by itself prove slow disk I/O or a save-system bug. Mod attribution is based on stack-frame ownership and repetition; a mod may appear because it is being called by another component, and native code, reflection, shared libraries, or classes loaded outside mod JARs may remain unattributed.
 - Thread dumps are snapshots. Repeated snapshots help distinguish a stable blocking call from changing work.
 - Thread CPU time is cumulative for the lifetime of a thread, not CPU usage over the exact stall interval.
 - GC counters are cumulative totals, not an exact per-pause timeline.
