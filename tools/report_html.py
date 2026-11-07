@@ -168,7 +168,16 @@ def _meta(values):
         "heapMaxMiB", "nonHeapUsedMiB", "deadlockDetected",
         "deadlockedThreadCount", "jfrFile",
     ]
-    return " ".join(f'<span>{html.escape(k)}: <b>{html.escape(values.get(k,"—"))}</b></span>' for k in keys)
+    rendered = []
+    for key in keys:
+        value = values.get(key, "—")
+        if key == "jfrFile" and value.lower().endswith(".jfr"):
+            safe_value = html.escape(value, quote=True)
+            content = f'<a href="{safe_value}">{safe_value}</a>'
+        else:
+            content = html.escape(value)
+        rendered.append(f'<span>{html.escape(key)}: <b>{content}</b></span>')
+    return " ".join(rendered)
 
 def _cards(reports, snapshots):
     count = len(reports)
