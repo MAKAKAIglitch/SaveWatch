@@ -49,10 +49,10 @@ function Get-JdkInfo([string] $Candidate) {
         $VersionOutput = (& $JavaExe -version 2>&1 | Out-String)
         $CompilerOutput = (& $JavacExe -version 2>&1 | Out-String)
         $VersionMatch = [regex]::Match($VersionOutput, 'version\s+"(?<major>\d+)')
-        if (!$VersionMatch.Success) {
-            $VersionMatch = [regex]::Match($CompilerOutput, 'javac\s+(?<major>\d+)')
-        }
-        if (!$VersionMatch.Success -or [int]$VersionMatch.Groups["major"].Value -ne 21) {
+        $CompilerMatch = [regex]::Match($CompilerOutput, 'javac\s+(?<major>\d+)')
+        if (!$VersionMatch.Success -or !$CompilerMatch.Success -or
+            [int]$VersionMatch.Groups["major"].Value -ne 21 -or
+            [int]$CompilerMatch.Groups["major"].Value -ne 21) {
             return $null
         }
 
@@ -76,7 +76,7 @@ function Find-Jdk21 {
             $Normalized = [Environment]::ExpandEnvironmentVariables($Value.Trim().Trim('"'))
             if (!$Seen.ContainsKey($Normalized)) {
                 $Seen[$Normalized] = $true
-                $Candidates.Add($Normalized)
+                $null = $Candidates.Add($Normalized)
             }
         }
     }
@@ -145,7 +145,7 @@ function Install-Temurin21 {
     New-Item -ItemType Directory -Force -Path $ExtractPath | Out-Null
 
     Write-Info "Downloading Eclipse Temurin JDK 21..."
-    Invoke-WebRequest -Uri $Package.link -OutFile $ArchivePath -Headers @{ "User-Agent" = "SaveWatch-Builder" }
+    $null = Invoke-WebRequest -Uri $Package.link -OutFile $ArchivePath -Headers @{ "User-Agent" = "SaveWatch-Builder" }
 
     $ActualHash = (Get-FileHash -LiteralPath $ArchivePath -Algorithm SHA256).Hash.ToLowerInvariant()
     $ExpectedHash = ([string]$Package.checksum).ToLowerInvariant()
@@ -174,10 +174,10 @@ function Install-Temurin21 {
 
     if (Test-Path -LiteralPath $JdkInstallRoot) {
         $BackupPath = "$JdkInstallRoot.previous-$(Get-Date -Format 'yyyyMMddHHmmss')"
-        Move-Item -LiteralPath $JdkInstallRoot -Destination $BackupPath
+        Move-Item -LiteralPath $JdkInstallRoot -Destination $BackupPath | Out-Null
     }
 
-    Move-Item -LiteralPath $ExtractedJdkHome -Destination $JdkInstallRoot
+    Move-Item -LiteralPath $ExtractedJdkHome -Destination $JdkInstallRoot | Out-Null
     Remove-Item -LiteralPath $ExtractPath -Recurse -Force -ErrorAction SilentlyContinue
     Remove-Item -LiteralPath $ArchivePath -Force -ErrorAction SilentlyContinue
 
