@@ -235,7 +235,13 @@ public final class HtmlReportGenerator {
             appendMeta(out, snapshot, "nonHeapUsedMiB");
             appendMeta(out, snapshot, "deadlockDetected");
             appendMeta(out, snapshot, "deadlockedThreadCount");
-            appendMeta(out, snapshot, "jfrFile");
+            String jfrFile = snapshot.values.getOrDefault("jfrFile", "unavailable");
+            if (jfrFile.endsWith(".jfr")) {
+                out.append("<span>jfrFile: <b><a href=\\\"").append(escape(jfrFile)).append("\\">")
+                        .append(escape(jfrFile)).append("</a></b></span>");
+            } else {
+                appendMeta(out, snapshot, "jfrFile");
+            }
             out.append("</div>");
             for (ThreadDump thread : snapshot.threads) {
                 String threadId = "dump-" + reportIndex + "-thread-" + thread.id;
