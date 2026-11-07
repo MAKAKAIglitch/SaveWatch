@@ -145,7 +145,7 @@ function Install-Temurin21 {
     New-Item -ItemType Directory -Force -Path $ExtractPath | Out-Null
 
     Write-Info "Downloading Eclipse Temurin JDK 21..."
-    $null = Invoke-WebRequest -Uri $Package.link -OutFile $ArchivePath -Headers @{ "User-Agent" = "SaveWatch-Builder" }
+    $null = Invoke-WebRequest -Uri $Package.link -OutFile $ArchivePath -UseBasicParsing -Headers @{ "User-Agent" = "SaveWatch-Builder" }
 
     $ActualHash = (Get-FileHash -LiteralPath $ArchivePath -Algorithm SHA256).Hash.ToLowerInvariant()
     $ExpectedHash = ([string]$Package.checksum).ToLowerInvariant()
