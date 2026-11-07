@@ -103,7 +103,7 @@ public final class WatchdogMonitor {
         watchdog.setPriority(Thread.NORM_PRIORITY - 1);
         watchdog.start();
 
-        LOGGER.info("SaveWatch 0.5.0 started. Server/client stall threshold={}ms, repeat={}ms.",
+        LOGGER.info("SaveWatch 0.6.0 started. Server/client stall threshold={}ms, repeat={}ms.",
                 stallThresholdMs, repeatIntervalMs);
     }
 
@@ -400,7 +400,7 @@ public final class WatchdogMonitor {
                                       Thread targetThread, long captureStarted, String jfrFile) {
         StringBuilder out = new StringBuilder(32_768);
         out.append("SaveWatch diagnostic report\n")
-                .append("version=0.5.0\n")
+                .append("version=0.6.0\n")
                 .append("reason=").append(reason).append('\n')
                 .append("trigger=").append(trigger).append('\n')
                 .append("timestamp=").append(LocalDateTime.now()).append('\n')
@@ -500,6 +500,11 @@ public final class WatchdogMonitor {
             for (StackTraceElement frame : info.getStackTrace()) {
                 out.append("    at ").append(frame).append('\n');
             }
+        }
+
+        out.append("\n[MOD_ATTRIBUTION]\n");
+        for (ModAttribution.Evidence evidence : ModAttribution.analyze(infos, targetId)) {
+            out.append(evidence.toTsv()).append('\n');
         }
 
         out.append("\nthreadCount=").append(capturedThreads).append('\n')
