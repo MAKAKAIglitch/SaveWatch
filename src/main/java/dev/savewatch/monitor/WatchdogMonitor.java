@@ -99,7 +99,7 @@ public final class WatchdogMonitor {
         watchdog.setPriority(Thread.NORM_PRIORITY - 1);
         watchdog.start();
 
-        LOGGER.info("SaveWatch 0.3.0 started. Server/client stall threshold={}ms, repeat={}ms.",
+        LOGGER.info("SaveWatch 0.4.0 started. Server/client stall threshold={}ms, repeat={}ms.",
                 stallThresholdMs, repeatIntervalMs);
     }
 
@@ -284,8 +284,6 @@ public final class WatchdogMonitor {
     private static String statusText() {
         Runtime runtime = Runtime.getRuntime();
         long used = runtime.totalMemory() - runtime.freeMemory();
-        boolean inServerTick = SERVER_TICK_STARTED_NANOS.get() != 0;
-        boolean inClientTick = CLIENT_TICK_STARTED_NANOS.get() != 0;
         long now = System.nanoTime();
         long currentServerMs = activeDurationMs(SERVER_TICK_STARTED_NANOS.get(), now);
         long currentClientMs = activeDurationMs(CLIENT_TICK_STARTED_NANOS.get(), now);
