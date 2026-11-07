@@ -67,7 +67,8 @@ def safe_id(value: str) -> str:
 def build(reports: list[dict], output: Path) -> None:
     all_mods = Counter()
     trigger_mods = Counter()
-    for report in reports:
+    mod_anchors = {}
+    for report_index, report in enumerate(reports):
         focus = report["focus"]
         for thread in report["threads"]:
             for frame in thread["frames"]:
@@ -78,6 +79,9 @@ def build(reports: list[dict], output: Path) -> None:
                     all_mods[mod_id] += 1
                     if thread is focus:
                         trigger_mods[mod_id] += 1
+                        mod_anchors.setdefault(
+                            mod_id, f"dump-{report_index}-thread-{thread['id']}-line-{frame['line']}"
+                        )
 
     snapshots = []
     for index, report in enumerate(reports):
@@ -101,7 +105,10 @@ def build(reports: list[dict], output: Path) -> None:
     suspicious = []
     for mod, count in trigger_mods.most_common():
         total = all_mods[mod]
-        suspicious.append({"id": mod, "trigger": count, "total": total})
+        suspicious.append({
+            "id": mod, "trigger": count, "total": total,
+            "anchor": mod_anchors.get(mod, "dumps"),
+        })
 
     raw = []
     for index, report in enumerate(reports):
@@ -129,7 +136,7 @@ def build(reports: list[dict], output: Path) -> None:
     payload = json.dumps(snapshots, ensure_ascii=False).replace("</", "<\\/")
     mod_rows = "".join(
         f'<tr><td><code>{html.escape(item["id"])}</code></td><td>{item["trigger"]}</td><td>{item["total"]}</td>'
-        f'<td><a href="#dump-0">open snapshot</a></td></tr>' for item in suspicious
+        f'<td><a href="#{html.escape(item["anchor"])}">open exact frame</a></td></tr>' for item in suspicious
     ) or '<tr><td colspan="4" class="muted">No mod package identifiers found in captured stacks.</td></tr>'
 
     cards = _cards(reports, snapshots)
