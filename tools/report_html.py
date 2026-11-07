@@ -72,9 +72,12 @@ def build(reports: list[dict], output: Path) -> None:
         for thread in report["threads"]:
             for frame in thread["frames"]:
                 for match in MOD.finditer(frame["text"]):
-                    all_mods[match.group("id")] += 1
+                    mod_id = match.group("id")
+                    if mod_id.lower() in {"minecraft", "neoforge", "fml_loader", "java"}:
+                        continue
+                    all_mods[mod_id] += 1
                     if thread is focus:
-                        trigger_mods[match.group("id")] += 1
+                        trigger_mods[mod_id] += 1
 
     snapshots = []
     for index, report in enumerate(reports):
@@ -91,7 +94,7 @@ def build(reports: list[dict], output: Path) -> None:
             "state": focus["state"] if focus else "UNKNOWN",
             "heap": _number(values.get("heapUsedMiB")),
             "heapMax": _number(values.get("heapMaxMiB")),
-            "gc": _gc_total(report["gc"]), "frames": used,
+            "gc": _gc_total(report["gc"]), "frames": sorted(used),
             "threadCount": len(report["threads"]),
         })
 
