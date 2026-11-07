@@ -78,6 +78,7 @@ public final class WatchdogMonitor {
     private static volatile boolean jfrEnabled = true;
     private static volatile long jfrMaxAgeSeconds = 60;
     private static volatile long jfrMaxSizeMiB = 64;
+    private static volatile int jfrMaxExports = 4;
 
     private WatchdogMonitor() {}
 
@@ -269,7 +270,7 @@ public final class WatchdogMonitor {
             Files.createDirectories(directory);
             long sequence = SNAPSHOT_SEQUENCE.incrementAndGet();
             String suffix = FILE_TIME.format(LocalDateTime.now()) + "-" + sequence;
-            String jfrFile = JfrRecorder.dumpIfDue(directory.resolve("savewatch-" + suffix + ".jfr"), 30_000);
+            String jfrFile = JfrRecorder.dumpIfDue(directory.resolve("savewatch-" + suffix + ".jfr"), 30_000, jfrMaxExports);
             String report = buildReport(reason, tickDurationMs, trigger, targetThread, captureStarted, jfrFile);
             String filename = "savewatch-" + suffix + ".txt";
             Path output = directory.resolve(filename);
@@ -469,6 +470,7 @@ public final class WatchdogMonitor {
                 properties.setProperty("jfrEnabled", "true");
                 properties.setProperty("jfrMaxAgeSeconds", "60");
                 properties.setProperty("jfrMaxSizeMiB", "64");
+                properties.setProperty("jfrMaxExports", "4");
                 properties.setProperty("configVersion", "3");
                 try (var writer = Files.newBufferedWriter(config, StandardCharsets.UTF_8,
                         StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)) {
@@ -502,6 +504,10 @@ public final class WatchdogMonitor {
                 properties.setProperty("jfrMaxSizeMiB", "64");
                 configChanged = true;
             }
+            if (!properties.containsKey("jfrMaxExports")) {
+                properties.setProperty("jfrMaxExports", "4");
+                configChanged = true;
+            }
             if (!"3".equals(properties.getProperty("configVersion"))) {
                 properties.setProperty("configVersion", "3");
                 configChanged = true;
@@ -520,6 +526,7 @@ public final class WatchdogMonitor {
             jfrEnabled = Boolean.parseBoolean(properties.getProperty("jfrEnabled", "true"));
             jfrMaxAgeSeconds = boundedLong(properties, "jfrMaxAgeSeconds", 60, 10, 600);
             jfrMaxSizeMiB = boundedLong(properties, "jfrMaxSizeMiB", 64, 16, 512);
+            jfrMaxExports = (int) boundedLong(properties, "jfrMaxExports", 4, 1, 20);
         } catch (IOException | RuntimeException exception) {
             LOGGER.warn("Could not load config/savewatch.properties; using safe defaults.", exception);
         }
