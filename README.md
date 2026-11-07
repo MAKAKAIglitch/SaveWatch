@@ -32,7 +32,7 @@ The builder reuses Gradle's daemon and build cache for faster repeat builds. No 
   - `/savewatch status` — tick progress and heap summary.
   - `/savewatch dump` — queues a manual JVM/thread snapshot.
 
-Defaults: 2-second stall threshold, 2-second interval between snapshots, maximum 8 snapshots per continuous stall, 32 stack frames per thread.
+Defaults: 2-second stall threshold, 2-second interval between snapshots, maximum 20 snapshots per continuous stall, 32 stack frames per thread.
 
 ## Configuration
 
@@ -42,7 +42,7 @@ After first launch, edit `config/savewatch.properties`:
 |---|---:|---:|---|
 | `stallThresholdMs` | 2000 | 250–60000 | Tick duration before a snapshot |
 | `repeatIntervalMs` | 2000 | 500–60000 | Minimum delay between snapshots |
-| `maxDumpsPerStall` | 8 | 1–100 | Maximum snapshots during one stall |
+| `maxDumpsPerStall` | 20 | 1–100 | Maximum snapshots during one stall |
 | `stackDepth` | 32 | 8–128 | Maximum stack frames per thread |
 
 ## Build
