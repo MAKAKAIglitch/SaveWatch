@@ -72,6 +72,11 @@ public final class AiSummaryWriter {
             }
             out.append("\nПолный файл: [").append(snapshots.get(0).getFileName()).append("](")
                     .append(snapshots.get(0).getFileName()).append(")\n");
+            List<String> frames = triggerFrames(snapshots.get(0), latest.get("triggerThread"));
+            if (!frames.isEmpty()) {
+                out.append("\\n## Первые кадры потока-триггера\\n");
+                for (String frame : frames) out.append("- `").append(frame).append("`\\n");
+            }
         }
         out.append("\n## Как использовать\n")
                 .append("Передайте эту сводку ИИ вместе с 1–3 наиболее релевантными полными дампами. ")
@@ -80,6 +85,27 @@ public final class AiSummaryWriter {
         Path output = directory.resolve("ai-summary.md");
         Files.writeString(output, out, StandardCharsets.UTF_8);
         return output;
+    }
+
+    private static List<String> triggerFrames(Path path, String triggerThread) {
+        List<String> result = new ArrayList<>();
+        if (triggerThread == null) return result;
+        boolean inTrigger = false;
+        try (var reader = Files.newBufferedReader(path, StandardCharsets.UTF_8)) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                if (line.startsWith("--- ")) {
+                    inTrigger = line.startsWith("--- " + triggerThread + " |");
+                    continue;
+                }
+                if (inTrigger && line.startsWith("    at ")) {
+                    result.add(line.substring(7).trim());
+                    if (result.size() == 3) break;
+                }
+                if (inTrigger && line.isBlank()) break;
+            }
+        } catch (IOException ignored) {}
+        return result;
     }
 
     private static Map<String, String> readHeader(Path path) {
