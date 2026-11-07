@@ -18,7 +18,7 @@ The builder reuses Gradle's daemon and build cache for faster repeat builds. No 
 - Java: 21
 - Mod ID: `savewatch`
 
-## Features in 0.2.0
+## Features in 0.3.0
 
 - Watches server ticks, client ticks, and render frames independently.
 - A low-priority daemon watchdog checks progress every 200 ms.
@@ -27,10 +27,13 @@ The builder reuses Gradle's daemon and build cache for faster repeat builds. No 
 - Prioritizes the stalled thread, then captures all live JVM threads.
 - Collects thread stacks without the more expensive full monitor/synchronizer enumeration.
 - Captures JVM heap, non-heap, garbage-collection counters, thread states, and basic lock-owner information.
-- Writes reports to `logs/savewatch/`.
+- Writes diagnostic snapshots to `logs/savewatch/`.
+- Automatically generates a self-contained offline HTML report at `logs/savewatch/index.html` after a monitored long tick or render frame finishes.
+- `/savewatch report` regenerates the HTML report on demand; report generation runs on a background daemon thread.
 - Operator commands:
   - `/savewatch status` — tick progress and heap summary.
   - `/savewatch dump` — queues a manual JVM/thread snapshot.
+  - `/savewatch report` — generates the HTML report from existing snapshots.
 
 Defaults: 2-second stall threshold, 2-second interval between snapshots, maximum 20 snapshots per continuous stall, 32 stack frames per thread.
 
@@ -63,13 +66,12 @@ The JAR is written to `build/libs/`.
 
 ## Developer tools
 
-The mod itself is written in Java because it runs inside the NeoForge JVM. Python is used for offline report analysis:
+The built-in HTML report is generated entirely in Java by the mod; Python is not required. The optional Python tools remain available for offline analysis outside Minecraft:
 
 - `tools/analyze_reports.py` summarizes snapshots, groups repeated frames from the thread that triggered each snapshot, and reports tick-duration statistics.
 - It uses only the Python standard library; Python is not required to install or run the Minecraft mod.
 - On Windows, run `analyze.bat logs\\savewatch` for the Markdown summary.
-- Run `report.bat` to generate `logs/savewatch/index.html` and open it in your browser. The HTML report is self-contained and works offline; it includes a stall timeline, heap/GC charts, stack comparison, potential mod clues, and expandable thread dumps with direct frame links.
-- Or run `py -3 tools/report_html.py logs\\savewatch --open`.
+- The optional `report.bat` / `tools/report_html.py` can still generate a report outside Minecraft when needed.
 - Run its tests with `py -3 -m unittest discover -s tests -v`.
 
 ## Diagnostic limitations
