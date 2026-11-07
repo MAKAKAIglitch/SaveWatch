@@ -54,3 +54,21 @@ The builder uses the official Eclipse Adoptium distribution and the repository's
 - If Gradle dependency resolution fails, check access to the Gradle distribution service, Maven Central, and NeoForge's Maven repository.
 - Build output and errors are printed in the console. The detailed Gradle output is retained in the terminal.
 - To use a different JDK 21, set `JAVA_HOME` before launching `build.bat`.
+
+## Python diagnostic tools (optional)
+
+Python is not needed to compile or run the Minecraft mod. It is used only for offline analysis and tests.
+
+To summarize reports on Windows:
+
+```bat
+analyze.bat logs\savewatch
+```
+
+Python 3.10 or newer is recommended. The analyzer uses only the standard library and does not install packages.
+
+Run tests:
+
+```bat
+py -3 -m unittest discover -s tests -v
+```
