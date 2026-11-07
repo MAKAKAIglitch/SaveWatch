@@ -24,6 +24,19 @@ function Write-Warn([string] $Message) {
     Write-Host "[WARN] $Message" -ForegroundColor Yellow
 }
 
+function Invoke-JavaVersion([string] $Executable, [string[]] $Arguments) {
+    # java -version writes to stderr. PowerShell 5.1 treats native stderr as
+    # an error record when ErrorActionPreference=Stop, so temporarily allow it.
+    $PreviousErrorActionPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = "Continue"
+        $Output = & $Executable @Arguments 2>&1
+        return ($Output | Out-String).Trim()
+    } finally {
+        $ErrorActionPreference = $PreviousErrorActionPreference
+    }
+}
+
 function Get-JdkInfo([string] $Candidate) {
     if ([string]::IsNullOrWhiteSpace($Candidate)) {
         return $null
@@ -49,8 +62,8 @@ function Get-JdkInfo([string] $Candidate) {
     }
 
     try {
-        $VersionOutput = (& $JavaExe -version 2>&1 | Out-String)
-        $CompilerOutput = (& $JavacExe -version 2>&1 | Out-String)
+        $VersionOutput = Invoke-JavaVersion $JavaExe @("-version")
+        $CompilerOutput = Invoke-JavaVersion $JavacExe @("-version")
         $VersionMatch = [regex]::Match($VersionOutput, 'version\s+"(?<major>\d+)')
         $CompilerMatch = [regex]::Match($CompilerOutput, 'javac\s+(?<major>\d+)')
         if (!$VersionMatch.Success -or !$CompilerMatch.Success -or
@@ -124,7 +137,7 @@ function Find-Jdk21 {
         if ((Test-Path -LiteralPath $CandidateJava -PathType Leaf) -and
             (Test-Path -LiteralPath $CandidateJavac -PathType Leaf)) {
             try {
-                $DetectedVersion = (& $CandidateJava -version 2>&1 | Out-String).Trim()
+                $DetectedVersion = Invoke-JavaVersion $CandidateJava @("-version")
                 $DetectedMatch = [regex]::Match($DetectedVersion, 'version\s+"(?<major>\d+)')
                 if ($DetectedMatch.Success) {
                     $DetectedMajor = [int]$DetectedMatch.Groups["major"].Value
