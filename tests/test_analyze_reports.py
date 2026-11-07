@@ -54,7 +54,7 @@ class AnalyzeReportsTests(unittest.TestCase):
             path = Path(directory) / "render-stall.txt"
             path.write_text(
                 SAMPLE_REPORT.replace("reason=LONG_SERVER_TICK", "reason=LONG_RENDER_FRAME")
-                .replace("serverThread=Server thread", "serverThread=Server thread\\ntriggerThread=Render thread"),
+                .replace("serverThread=Server thread", "serverThread=Server thread\ntriggerThread=Render thread"),
                 encoding="utf-8",
             )
             report = parse_report(path)
@@ -71,7 +71,7 @@ class AnalyzeReportsTests(unittest.TestCase):
 
         summary = render_summary([report, report], top=5)
         self.assertIn("Reports read: **2**", summary)
-        self.assertIn("Longest captured tick: **12000 ms**", summary)
+        self.assertIn("Longest captured stall: **12000 ms**", summary)
         self.assertIn("example.save.ModSaver.save", summary)
         self.assertIn("not proof of a root cause", summary)
 
