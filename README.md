@@ -40,7 +40,7 @@
 - `/savewatch dump` — queue a manual JVM/thread snapshot.
 - `/savewatch report` — regenerate the HTML report from existing snapshots.
 
-Defaults: 2-second stall threshold, 2-second interval between snapshots, maximum 20 snapshots per continuous stall, 32 stack frames per thread, JFR enabled with a 60-second rolling window and a 64 MiB recording cap.
+Defaults: 2-second stall threshold, 2-second interval between snapshots, maximum 20 snapshots per continuous stall, 32 stack frames per thread, JFR enabled with a 60-second rolling window, a 64 MiB recording cap, and the four newest exported JFR files.
 
 ## Configuration
 
@@ -55,6 +55,7 @@ After first launch, edit `config/savewatch.properties`:
 | `jfrEnabled` | true | true/false | Enable rolling Java Flight Recorder |
 | `jfrMaxAgeSeconds` | 60 | 10–600 | Maximum age of retained JFR events |
 | `jfrMaxSizeMiB` | 64 | 16–512 | Maximum rolling JFR repository size |
+| `jfrMaxExports` | 4 | 1–20 | Number of exported JFR files to retain |
 
 Existing configuration files are migrated by adding new keys while preserving customized values.
 
