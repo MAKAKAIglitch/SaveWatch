@@ -76,7 +76,7 @@ class AnalyzeReportsTests(unittest.TestCase):
         self.assertIn("Reports read: **2**", summary)
         self.assertIn("Longest captured stall: **12000 ms**", summary)
         self.assertIn("example.save.ModSaver.save", summary)
-        self.assertIn("Snapshots with detected JVM deadlocks: **1**", summary)
+        self.assertIn("Snapshots with detected JVM deadlocks: **2**", summary)
         self.assertIn("Snapshots with a JFR export: **1**", summary)
         self.assertIn("not proof of a root cause", summary)
 
