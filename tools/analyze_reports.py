@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Summarize SaveWatch snapshots and identify repeated server-thread stack frames.
+"""Summarize SaveWatch snapshots and identify repeated frames from the thread that triggered each snapshot.
 
 Uses only the Python standard library. It reads reports without modifying them.
 """
@@ -113,7 +113,7 @@ def render_summary(reports: list[Report], top: int) -> str:
     durations: list[tuple[int, Report]] = []
     states: Counter[str] = Counter()
     frame_counts: Counter[str] = Counter()
-    missing_server = 0
+    missing_focus = 0
 
     for report in reports:
         try:
@@ -122,14 +122,14 @@ def render_summary(reports: list[Report], top: int) -> str:
             pass
         focus = report.focus_thread
         if focus is None:
-            missing_server += 1
+            missing_focus += 1
             continue
         states[focus.state] += 1
         frame_counts.update(focus.frames)
 
     lines += [
         f"- Time range: **{reports[0].values.get('timestamp', 'unknown')}** to **{reports[-1].values.get('timestamp', 'unknown')}**",
-        f"- Reports without a matching trigger-thread section: **{missing_server}**",
+        f"- Reports without a matching trigger-thread section: **{missing_focus}**",
     ]
 
     if durations:
