@@ -77,9 +77,15 @@ public final class MemoryLeakAnalyzer {
         double minimumHeapPercent = SaveWatchConfig.MEMORY_LEAK_MIN_HEAP_PERCENT.get();
 
         if (growthBytes < requiredGrowth || heapPercent < minimumHeapPercent) return null;
-        double growthMiBPerMinute = growthBytes / (1024.0 * 1024.0)
-                / (elapsed / 60_000_000_000.0);
-        if (growthMiBPerMinute < 0.5) return null;
+        double growthMiBPerMinute = regressionSlopeMiBPerMinute();
+        int risingIntervals = 0;
+        Sample previous = null;
+        for (Sample sample : SAMPLES) {
+            if (previous != null && sample.usedBytes > previous.usedBytes) risingIntervals++;
+            previous = sample;
+        }
+        int intervals = SAMPLES.size() - 1;
+        if (risingIntervals < Math.ceil(intervals * 0.6) || growthMiBPerMinute < 0.5) return null;
 
         long cooldown = SaveWatchConfig.MEMORY_LEAK_ALERT_COOLDOWN_MINUTES.get() * 60_000_000_000L;
         if (lastAlertNanos != 0 && now - lastAlertNanos < cooldown) return null;
@@ -94,6 +100,25 @@ public final class MemoryLeakAnalyzer {
             server.getPlayerList().broadcastSystemMessage(Component.literal(message), false);
         }
         return message;
+    }
+
+    private static double regressionSlopeMiBPerMinute() {
+        Sample first = SAMPLES.getFirst();
+        int count = SAMPLES.size();
+        double sumX = 0.0;
+        double sumY = 0.0;
+        double sumXX = 0.0;
+        double sumXY = 0.0;
+        for (Sample sample : SAMPLES) {
+            double x = (sample.timeNanos - first.timeNanos) / 60_000_000_000.0;
+            double y = sample.usedBytes / (1024.0 * 1024.0);
+            sumX += x;
+            sumY += y;
+            sumXX += x * x;
+            sumXY += x * y;
+        }
+        double denominator = count * sumXX - sumX * sumX;
+        return denominator <= 0.0 ? 0.0 : (count * sumXY - sumX * sumY) / denominator;
     }
 
     private static long totalGcCount() {
