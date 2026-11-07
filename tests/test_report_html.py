@@ -63,6 +63,7 @@ class HtmlReportTests(unittest.TestCase):
             self.assertIn("Critical — JVM deadlock detected", page)
             self.assertIn("Deadlocked threads", page)
             self.assertIn("savewatch-test.jfr", page)
+            self.assertIn('href="savewatch-test.jfr"', page)
 
 
 if __name__ == "__main__":
