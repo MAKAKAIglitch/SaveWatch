@@ -7,8 +7,8 @@ modId="${mod_id}"
 version="${mod_version}"
 displayName="${mod_name}"
 authors="SaveWatch contributors"
-description='''A lightweight diagnostic watchdog for long Minecraft server ticks.
-Captures server-thread and JVM thread snapshots while a tick is stalled.
+description='''A lightweight diagnostic watchdog for Minecraft 1.21.1.
+Monitors client and server tick stalls and captures JVM thread snapshots.
 It does not modify worlds, chunks, entities, or save data.'''
 
 [[dependencies.${mod_id}]]
