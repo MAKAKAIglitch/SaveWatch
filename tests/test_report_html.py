@@ -49,6 +49,21 @@ class HtmlReportTests(unittest.TestCase):
             self.assertIn("Memory and GC", page)
             self.assertNotIn("__DATA__", page)
 
+    def test_deadlock_and_jfr_are_visible(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "deadlock.txt"
+            output = Path(directory) / "index.html"
+            diagnostic = SAMPLE.replace(
+                "[GC]",
+                "deadlockDetected=true\\ndeadlockedThreadCount=2\\njfrFile=savewatch-test.jfr\\n\\n[GC]",
+            )
+            source.write_text(diagnostic, encoding="utf-8")
+            build([parse(source)], output)
+            page = output.read_text(encoding="utf-8")
+            self.assertIn("Critical — JVM deadlock detected", page)
+            self.assertIn("Deadlocked threads", page)
+            self.assertIn("savewatch-test.jfr", page)
+
 
 if __name__ == "__main__":
     unittest.main()
