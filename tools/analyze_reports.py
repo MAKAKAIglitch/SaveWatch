@@ -129,15 +129,15 @@ def render_summary(reports: list[Report], top: int) -> str:
 
     lines += [
         f"- Time range: **{reports[0].values.get('timestamp', 'unknown')}** to **{reports[-1].values.get('timestamp', 'unknown')}**",
-        f"- Reports without a matching server-thread section: **{missing_server}**",
+        f"- Reports without a matching trigger-thread section: **{missing_server}**",
     ]
 
     if durations:
         longest, longest_report = max(durations, key=lambda item: item[0])
         average = sum(value for value, _ in durations) / len(durations)
         lines += [
-            f"- Longest captured tick: **{longest} ms** ({longest_report.path.name})",
-            f"- Average captured tick duration: **{average:.1f} ms**",
+            f"- Longest captured stall: **{longest} ms** ({longest_report.path.name})",
+            f"- Average captured stall duration: **{average:.1f} ms**",
         ]
 
     if states:
