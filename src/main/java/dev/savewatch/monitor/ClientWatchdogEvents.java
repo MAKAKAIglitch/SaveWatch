@@ -6,7 +6,7 @@ import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
 import net.neoforged.neoforge.client.event.RenderFrameEvent;
 
-/** Client-only tick hooks. Kept separate so dedicated servers never load client classes. */
+/** Client tick and render hooks. Kept separate so dedicated servers never load client classes. */
 @EventBusSubscriber(modid = "savewatch", value = Dist.CLIENT)
 public final class ClientWatchdogEvents {
     private ClientWatchdogEvents() {}
