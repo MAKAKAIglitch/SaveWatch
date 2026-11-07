@@ -1,6 +1,6 @@
 # SaveWatch
 
-**SaveWatch** is a diagnostic NeoForge mod for Minecraft 1.21.1. Its first release captures evidence when the logical server thread stops making progress for an unusually long time.
+**SaveWatch** is a community-oriented diagnostic NeoForge mod for Minecraft 1.21.1. Its first release captures evidence when the logical server thread stops making progress for an unusually long time. The project is standalone and is not tied to a modpack or private organization.
 
 > **Current scope:** SaveWatch observes server tick stalls. Version 0.1.0 does not identify the exact cause of a stall, does not instrument BetterAutoSave internals, and does not change Minecraft's save implementation.
 
@@ -67,6 +67,17 @@ Development runs:
 gradlew.bat runClient
 gradlew.bat runServer
 ```
+
+## Developer tools
+
+The mod itself is written in Java because it runs inside the NeoForge JVM. Python is used for offline developer tooling:
+
+- `tools/analyze_reports.py` summarizes one or more SaveWatch snapshots, groups repeated server-thread stack frames, and reports tick-duration statistics.
+- It uses only the Python 3 standard library; Python is not required to install or run the Minecraft mod.
+- On Windows, run `analyze.bat logs\\savewatch`.
+- Run its tests with `py -3 -m unittest discover -s tests -v`.
+
+Rust is intentionally not a runtime dependency. A separate Rust utility may be justified later if profiling shows that large-scale report processing or another CPU-heavy task is actually constrained by Python. The current workload does not justify JNI or a native library in the mod.
 
 ## Diagnostic limitations
 
