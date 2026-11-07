@@ -13,9 +13,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 THREAD_HEADER = re.compile(
-    r"^--- (?P<name>.*?) \\| id=(?P<id>\\d+) \\| state=(?P<state>[A-Z_]+)(?: \\| .*?)? ---$"
+    r"^--- (?P<name>.*?) \| id=(?P<id>\d+) \| state=(?P<state>[A-Z_]+)(?: \| .*?)? ---$"
 )
-STACK_FRAME = re.compile(r"^\\s+at (?P<frame>.+)$")
+STACK_FRAME = re.compile(r"^\s+at (?P<frame>.+)$")
 KEY_VALUE = re.compile(r"^(?P<key>[A-Za-z][A-Za-z0-9]*)=(?P<value>.*)$")
 
 
@@ -47,7 +47,7 @@ def parse_report(path: Path) -> Report:
     in_threads = False
 
     for raw_line in path.read_text(encoding="utf-8", errors="replace").splitlines():
-        line = raw_line.strip("\\ufeff")
+        line = raw_line.strip("\ufeff")
         if line == "[GC]":
             in_gc, in_threads = True, False
             continue
@@ -103,7 +103,7 @@ def render_summary(reports: list[Report], top: int) -> str:
     ]
     if not reports:
         lines += ["", "No SaveWatch .txt reports were found."]
-        return "\\n".join(lines) + "\\n"
+        return "\n".join(lines) + "\n"
 
     durations: list[tuple[int, Report]] = []
     states: Counter[str] = Counter()
@@ -166,7 +166,7 @@ def render_summary(reports: list[Report], top: int) -> str:
         "",
         "Heap and GC values in each snapshot are point-in-time or cumulative JVM counters. They do not, by themselves, establish that garbage collection caused a pause.",
     ]
-    return "\\n".join(lines) + "\\n"
+    return "\n".join(lines) + "\n"
 
 
 def main() -> int:
