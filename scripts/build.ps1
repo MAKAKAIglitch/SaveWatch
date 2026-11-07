@@ -31,7 +31,10 @@ function Get-JdkInfo([string] $Candidate) {
 
     $Candidate = [Environment]::ExpandEnvironmentVariables($Candidate.Trim().Trim('"'))
     if (Test-Path -LiteralPath $Candidate -PathType Leaf) {
-        if ([IO.Path]::GetFileName($Candidate) -ieq "java.exe") {
+        $ExecutableName = [IO.Path]::GetFileName($Candidate)
+        if ($ExecutableName -ieq "java.exe" -or $ExecutableName -ieq "javaw.exe" -or $ExecutableName -ieq "javac.exe") {
+            # Accept executable paths supplied by JAVA_HOME or discovered in PATH,
+            # but always run java.exe for version checks and Gradle.
             $Candidate = Split-Path (Split-Path $Candidate -Parent) -Parent
         } else {
             return $null
@@ -113,6 +116,24 @@ function Find-Jdk21 {
         if ($Jdk) {
             return $Jdk
         }
+
+        $CandidateJava = Join-Path $Candidate "bin\java.exe"
+        $CandidateJavac = Join-Path $Candidate "bin\javac.exe"
+        if ((Test-Path -LiteralPath $CandidateJava -PathType Leaf) -and
+            (Test-Path -LiteralPath $CandidateJavac -PathType Leaf)) {
+            try {
+                $DetectedVersion = (& $CandidateJava -version 2>&1 | Out-String).Trim()
+                $DetectedMatch = [regex]::Match($DetectedVersion, 'version\s+"(?<major>\d+)')
+                if ($DetectedMatch.Success) {
+                    $DetectedMajor = [int]$DetectedMatch.Groups["major"].Value
+                    if ($DetectedMajor -ne 21) {
+                        Write-Warn "Found JDK $DetectedMajor at '$Candidate', but this project requires JDK 21. The existing Java installation will not be changed."
+                    }
+                }
+            } catch {
+                Write-Warn "Found a Java installation at '$Candidate', but could not run its version check."
+            }
+        }
     }
 
     return $null
@@ -124,7 +145,8 @@ function Install-Temurin21 {
     $Architecture = if ($env:PROCESSOR_ARCHITECTURE -eq "ARM64") { "aarch64" } else { "x64" }
     $ApiUrl = "https://api.adoptium.net/v3/assets/latest/21/hotspot?architecture=$Architecture&image_type=jdk&os=windows&vendor=eclipse"
 
-    Write-Info "No suitable JDK 21 was found."
+    Write-Info "No compatible JDK 21 was found."
+    Write-Info "The builder will install a separate Eclipse Temurin JDK 21 inside .tools; existing Java versions and Windows settings will remain unchanged."
     Write-Info "Fetching official Eclipse Temurin 21 package information ($Architecture)..."
 
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
