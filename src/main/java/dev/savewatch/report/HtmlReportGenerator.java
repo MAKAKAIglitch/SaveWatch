@@ -237,6 +237,13 @@ public final class HtmlReportGenerator {
             appendMeta(out, snapshot, "nonHeapUsedMiB");
             appendMeta(out, snapshot, "deadlockDetected");
             appendMeta(out, snapshot, "deadlockedThreadCount");
+            appendMeta(out, snapshot, "sparkDetected");
+            appendMeta(out, snapshot, "serverTps");
+            appendMeta(out, snapshot, "serverMsptAvg");
+            appendMeta(out, snapshot, "serverMsptP95");
+            appendMeta(out, snapshot, "serverMsptMax");
+            appendMeta(out, snapshot, "clientFpsAvg");
+            appendMeta(out, snapshot, "clientFps1Low");
             String jfrFile = snapshot.values.getOrDefault("jfrFile", "unavailable");
             if (jfrFile.endsWith(".jfr")) {
                 out.append("<span>jfrFile: <b><a href=\"").append(escape(jfrFile)).append("\">")
