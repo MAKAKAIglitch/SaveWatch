@@ -5,6 +5,7 @@ import java.nio.file.Path;
 import java.time.Duration;
 import jdk.jfr.Configuration;
 import jdk.jfr.Recording;
+import jdk.jfr.RecordingState;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -24,7 +25,7 @@ public final class JfrRecorder {
             LOGGER.info("JFR recording is disabled in config/savewatch.properties.");
             return;
         }
-        if (recording != null && recording.getState() == Recording.State.RUNNING) return;
+        if (recording != null && recording.getState() == RecordingState.RUNNING) return;
 
         try {
             Recording next = new Recording(Configuration.getConfiguration("profile"));
@@ -56,7 +57,7 @@ public final class JfrRecorder {
         try {
             // Copy the live rolling recording so exporting a diagnostic never stops
             // the recorder and never creates a blind interval after the first stall.
-            try (Recording snapshot = recording.copy(false)) {
+            try (Recording snapshot = recording.copy(true)) {
                 snapshot.dump(destination);
             }
             lastDumpNanos = now;
