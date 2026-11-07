@@ -192,9 +192,19 @@ public final class WatchdogMonitor {
         out.append("\n[THREADS]\n");
         ThreadMXBean threadBean = ManagementFactory.getThreadMXBean();
         long[] ids = threadBean.getAllThreadIds();
-        int count = Math.min(ids.length, 120);
-        long[] limitedIds = new long[count];
-        System.arraycopy(ids, 0, limitedIds, 0, count);
+        long serverThreadId = serverThread == null ? -1L : serverThread.getId();
+        long[] limitedIds = new long[Math.min(ids.length + (serverThreadId > 0 ? 1 : 0), 120)];
+        int selected = 0;
+        if (serverThreadId > 0) limitedIds[selected++] = serverThreadId;
+        for (long id : ids) {
+            if (selected >= limitedIds.length) break;
+            if (id != serverThreadId) limitedIds[selected++] = id;
+        }
+        if (selected != limitedIds.length) {
+            long[] trimmed = new long[selected];
+            System.arraycopy(limitedIds, 0, trimmed, 0, selected);
+            limitedIds = trimmed;
+        }
         ThreadInfo[] infos = threadBean.getThreadInfo(limitedIds, true, true, stackDepth);
 
         for (ThreadInfo info : infos) {
