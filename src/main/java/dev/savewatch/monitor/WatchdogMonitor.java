@@ -331,6 +331,7 @@ public final class WatchdogMonitor {
                 properties.setProperty("repeatIntervalMs", "2000");
                 properties.setProperty("maxDumpsPerStall", "8");
                 properties.setProperty("stackDepth", "32");
+                properties.setProperty("configVersion", "2");
                 try (var writer = Files.newBufferedWriter(config, StandardCharsets.UTF_8,
                         StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)) {
                     properties.store(writer, "SaveWatch 0.2.0 settings");
@@ -339,6 +340,25 @@ public final class WatchdogMonitor {
             try (var reader = Files.newBufferedReader(config, StandardCharsets.UTF_8)) {
                 properties.load(reader);
             }
+
+            // Migrate untouched 0.1.0 defaults while preserving user-customized values.
+            if (!properties.containsKey("configVersion")) {
+                if ("5000".equals(properties.getProperty("repeatIntervalMs"))) {
+                    properties.setProperty("repeatIntervalMs", "2000");
+                }
+                if ("20".equals(properties.getProperty("maxDumpsPerStall"))) {
+                    properties.setProperty("maxDumpsPerStall", "8");
+                }
+                if ("48".equals(properties.getProperty("stackDepth"))) {
+                    properties.setProperty("stackDepth", "32");
+                }
+                properties.setProperty("configVersion", "2");
+                try (var writer = Files.newBufferedWriter(config, StandardCharsets.UTF_8,
+                        StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE)) {
+                    properties.store(writer, "SaveWatch 0.2.0 settings");
+                }
+            }
+
             stallThresholdMs = boundedLong(properties, "stallThresholdMs", 2_000, 250, 60_000);
             repeatIntervalMs = boundedLong(properties, "repeatIntervalMs", 2_000, 500, 60_000);
             maxDumpsPerStall = (int) boundedLong(properties, "maxDumpsPerStall", 8, 1, 100);
