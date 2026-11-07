@@ -72,7 +72,7 @@ public final class WatchdogMonitor {
         watchdog.setPriority(Thread.NORM_PRIORITY - 1);
         watchdog.start();
 
-        LOGGER.info("SaveWatch 0.2.0 started. Server/client stall threshold={}ms, repeat={}ms.",
+        LOGGER.info("SaveWatch 0.3.0 started. Server/client stall threshold={}ms, repeat={}ms.",
                 stallThresholdMs, repeatIntervalMs);
     }
 
@@ -197,7 +197,7 @@ public final class WatchdogMonitor {
         long used = runtime.totalMemory() - runtime.freeMemory();
         boolean inServerTick = SERVER_TICK_STARTED_NANOS.get() != 0;
         boolean inClientTick = CLIENT_TICK_STARTED_NANOS.get() != 0;
-        return "SaveWatch 0.2.0 | observed server ticks=" + TICK_COUNT.get()
+        return "SaveWatch 0.3.0 | observed server ticks=" + TICK_COUNT.get()
                 + " | last server tick=" + LAST_SERVER_TICK_NANOS.get() / 1_000_000L + "ms"
                 + " | last client tick=" + LAST_CLIENT_TICK_NANOS.get() / 1_000_000L + "ms"
                 + " | last render frame=" + LAST_RENDER_FRAME_NANOS.get() / 1_000_000L + "ms"
@@ -378,7 +378,7 @@ public final class WatchdogMonitor {
                 properties.setProperty("configVersion", "2");
                 try (var writer = Files.newBufferedWriter(config, StandardCharsets.UTF_8,
                         StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)) {
-                    properties.store(writer, "SaveWatch 0.2.0 settings");
+                    properties.store(writer, "SaveWatch 0.3.0 settings");
                 }
             }
             try (var reader = Files.newBufferedReader(config, StandardCharsets.UTF_8)) {
@@ -396,7 +396,7 @@ public final class WatchdogMonitor {
                 properties.setProperty("configVersion", "2");
                 try (var writer = Files.newBufferedWriter(config, StandardCharsets.UTF_8,
                         StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE)) {
-                    properties.store(writer, "SaveWatch 0.2.0 settings");
+                    properties.store(writer, "SaveWatch 0.3.0 settings");
                 }
             }
 
