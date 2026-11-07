@@ -35,10 +35,10 @@ The included Gradle Wrapper downloads the project's pinned Gradle distribution a
 The resulting mod is placed in:
 
 ```
-build\\libs\\savewatch-0.1.0.jar
+build\\libs\\savewatch-0.4.0.jar
 ```
 
-The exact filename may change when the mod version changes. Sources JARs are not the file to install in Minecraft.
+The exact filename follows the current mod version configured in `gradle.properties`. Sources JARs are not the file to install in Minecraft.
 
 ## Optional Gradle arguments
 

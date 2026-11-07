@@ -163,8 +163,21 @@ def _gc_total(lines):
     return total
 
 def _meta(values):
-    keys = ["javaVersion", "availableProcessors", "heapUsedMiB", "heapCommittedMiB", "heapMaxMiB", "nonHeapUsedMiB"]
-    return " ".join(f'<span>{html.escape(k)}: <b>{html.escape(values.get(k,"—"))}</b></span>' for k in keys)
+    keys = [
+        "javaVersion", "availableProcessors", "heapUsedMiB", "heapCommittedMiB",
+        "heapMaxMiB", "nonHeapUsedMiB", "deadlockDetected",
+        "deadlockedThreadCount", "jfrFile",
+    ]
+    rendered = []
+    for key in keys:
+        value = values.get(key, "—")
+        if key == "jfrFile" and value.lower().endswith(".jfr"):
+            safe_value = html.escape(value, quote=True)
+            content = f'<a href="{safe_value}">{safe_value}</a>'
+        else:
+            content = html.escape(value)
+        rendered.append(f'<span>{html.escape(key)}: <b>{content}</b></span>')
+    return " ".join(rendered)
 
 def _cards(reports, snapshots):
     count = len(reports)
@@ -179,7 +192,17 @@ def _cards(reports, snapshots):
         maximum = _number(latest.get("heapMaxMiB"))
         if used is not None and maximum and maximum > 0:
             heap_ratio = used / maximum
-    if longest is not None and longest >= threshold * 5:
+    deadlock_detected = any(
+        report["values"].get("deadlockDetected", "").lower() == "true" for report in reports
+    )
+    deadlocked_threads = max(
+        (_number(report["values"].get("deadlockedThreadCount")) or 0 for report in reports),
+        default=0,
+    )
+    jfr_file = latest.get("jfrFile", "unavailable")
+    if deadlock_detected:
+        status = "Critical — JVM deadlock detected"
+    elif longest is not None and longest >= threshold * 5:
         status = "Critical · long stall captured"
     elif (longest is not None and longest >= threshold) or (heap_ratio is not None and heap_ratio >= .90):
         status = "Attention · threshold exceeded"
@@ -194,7 +217,9 @@ def _cards(reports, snapshots):
            '<article><small>Longest captured tick/frame</small><strong>—</strong></article>')
         + (f'<article><small>Latest heap used</small><strong>{heap[-1]:g} MiB</strong></article>' if heap else
            '<article><small>Latest heap used</small><strong>—</strong></article>')
-        + f'<article><small>Latest trigger</small><strong>{html.escape(latest.get("reason","—"))}</strong></article></div>'
+        + f'<article><small>Latest trigger</small><strong>{html.escape(latest.get("reason","—"))}</strong></article>'
+        + f'<article><small>Deadlocked threads</small><strong>{deadlocked_threads:g}</strong></article>'
+        + f'<article><small>JFR capture</small><strong>{html.escape(jfr_file)}</strong></article></div>'
     )
 
 PAGE = r"""<!doctype html>
