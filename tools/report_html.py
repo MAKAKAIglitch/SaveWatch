@@ -230,6 +230,8 @@ const list=document.getElementById('timeline-list');const max=Math.max(1,...data
 data.forEach(s=>{const el=document.createElement('div');el.className='event';const dur=s.duration===null?'n/a':Math.round(s.duration)+' ms';el.innerHTML='<div><b>'+esc(s.time||'Unknown time')+'</b><div class="muted">'+esc(s.reason)+'</div></div><div><a href="#dump-'+s.id+'">'+esc(s.file)+'</a><div class="bar"><i style="width:'+Math.max(1,((s.duration||0)/max)*100)+'%"></i></div></div><div><b>'+dur+'</b><div class="muted">'+esc(s.trigger)+' · '+esc(s.state)+'</div></div>';list.appendChild(el)});
 const stack=document.getElementById('stack-list');for(let i=1;i<data.length;i++){const a=data[i-1].frames,b=data[i].frames,shared=[...a].filter(x=>b.has(x)).length,union=new Set([...a,...b]).size,score=union?Math.round(shared/union*100):0;const p=document.createElement('p');p.textContent=data[i-1].file+' → '+data[i].file+': '+score+'% identical trigger-stack frames ('+shared+' shared).';stack.appendChild(p)}
 if(data.length<2)document.getElementById('stack-note').textContent='At least two snapshots are needed for stack comparison.';
+function revealHash(){const target=document.getElementById(decodeURIComponent(location.hash.slice(1)));if(target){target.closest('details')?.setAttribute('open','');target.scrollIntoView({block:'center'})}}
+window.addEventListener('hashchange',revealHash);revealHash();
 function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 </script></body></html>"""
 
