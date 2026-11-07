@@ -34,20 +34,25 @@ public final class WatchdogMonitor {
 
     private static final AtomicLong SERVER_TICK_STARTED_NANOS = new AtomicLong();
     private static final AtomicLong CLIENT_TICK_STARTED_NANOS = new AtomicLong();
+    private static final AtomicLong RENDER_FRAME_STARTED_NANOS = new AtomicLong();
     private static final AtomicLong LAST_SERVER_TICK_NANOS = new AtomicLong();
     private static final AtomicLong LAST_CLIENT_TICK_NANOS = new AtomicLong();
+    private static final AtomicLong LAST_RENDER_FRAME_NANOS = new AtomicLong();
     private static final AtomicLong TICK_COUNT = new AtomicLong();
 
     private static final AtomicLong LAST_SERVER_DUMP_NANOS = new AtomicLong();
     private static final AtomicLong LAST_CLIENT_DUMP_NANOS = new AtomicLong();
+    private static final AtomicLong LAST_RENDER_DUMP_NANOS = new AtomicLong();
     private static final AtomicLong SERVER_DUMPS_THIS_STALL = new AtomicLong();
     private static final AtomicLong CLIENT_DUMPS_THIS_STALL = new AtomicLong();
+    private static final AtomicLong RENDER_DUMPS_THIS_STALL = new AtomicLong();
 
     private static final AtomicBoolean STARTED = new AtomicBoolean();
     private static final AtomicBoolean WRITING = new AtomicBoolean();
 
     private static volatile Thread serverThread;
     private static volatile Thread clientThread;
+    private static volatile Thread renderThread;
     private static volatile long stallThresholdMs = 2_000;
     private static volatile long repeatIntervalMs = 2_000;
     private static volatile int maxDumpsPerStall = 8;
@@ -95,6 +100,19 @@ public final class WatchdogMonitor {
         CLIENT_DUMPS_THIS_STALL.set(0);
     }
 
+    /** Called at the start/end of a GameRenderer frame on the physical client. */
+    public static void onRenderFramePre() {
+        renderThread = Thread.currentThread();
+        RENDER_FRAME_STARTED_NANOS.set(System.nanoTime());
+    }
+
+    public static void onRenderFramePost() {
+        long started = RENDER_FRAME_STARTED_NANOS.getAndSet(0);
+        if (started != 0) LAST_RENDER_FRAME_NANOS.set(System.nanoTime() - started);
+        LAST_RENDER_DUMP_NANOS.set(0);
+        RENDER_DUMPS_THIS_STALL.set(0);
+    }
+
     public static void onRegisterCommands(RegisterCommandsEvent event) {
         CommandDispatcher<CommandSourceStack> dispatcher = event.getDispatcher();
         dispatcher.register(Commands.literal("savewatch")
@@ -125,6 +143,8 @@ public final class WatchdogMonitor {
                     LAST_SERVER_DUMP_NANOS, SERVER_DUMPS_THIS_STALL, serverThread);
             checkStall("LONG_CLIENT_TICK", CLIENT_TICK_STARTED_NANOS.get(),
                     LAST_CLIENT_DUMP_NANOS, CLIENT_DUMPS_THIS_STALL, clientThread);
+            checkStall("LONG_RENDER_FRAME", RENDER_FRAME_STARTED_NANOS.get(),
+                    LAST_RENDER_DUMP_NANOS, RENDER_DUMPS_THIS_STALL, renderThread);
         }
     }
 
@@ -150,7 +170,10 @@ public final class WatchdogMonitor {
         if (serverStarted != 0) return (System.nanoTime() - serverStarted) / 1_000_000L;
         long clientStarted = CLIENT_TICK_STARTED_NANOS.get();
         if (clientStarted != 0) return (System.nanoTime() - clientStarted) / 1_000_000L;
-        return Math.max(LAST_SERVER_TICK_NANOS.get(), LAST_CLIENT_TICK_NANOS.get()) / 1_000_000L;
+        long renderStarted = RENDER_FRAME_STARTED_NANOS.get();
+        if (renderStarted != 0) return (System.nanoTime() - renderStarted) / 1_000_000L;
+        return Math.max(Math.max(LAST_SERVER_TICK_NANOS.get(), LAST_CLIENT_TICK_NANOS.get()),
+                LAST_RENDER_FRAME_NANOS.get()) / 1_000_000L;
     }
 
     private static String statusText() {
@@ -161,8 +184,10 @@ public final class WatchdogMonitor {
         return "SaveWatch 0.2.0 | observed server ticks=" + TICK_COUNT.get()
                 + " | last server tick=" + LAST_SERVER_TICK_NANOS.get() / 1_000_000L + "ms"
                 + " | last client tick=" + LAST_CLIENT_TICK_NANOS.get() / 1_000_000L + "ms"
-                + (inServerTick ? " | current server tick=" + currentTickDurationMs() + "ms" : "")
+                + " | last render frame=" + LAST_RENDER_FRAME_NANOS.get() / 1_000_000L + "ms"
+                + (inServerTick ? " | current tick=" + currentTickDurationMs() + "ms" : "")
                 + (inClientTick ? " | client tick active" : "")
+                + (RENDER_FRAME_STARTED_NANOS.get() != 0 ? " | render frame active" : "")
                 + " | heap used=" + formatMiB(used) + " MiB"
                 + " | heap max=" + formatMiB(runtime.maxMemory()) + " MiB";
     }
@@ -180,7 +205,12 @@ public final class WatchdogMonitor {
         }, "SaveWatch Snapshot Writer");
         writer.setDaemon(true);
         writer.setPriority(Thread.NORM_PRIORITY - 1);
-        writer.start();
+        try {
+            writer.start();
+        } catch (RuntimeException exception) {
+            WRITING.set(false);
+            throw exception;
+        }
     }
 
     private static void writeSnapshot(String reason, long tickDurationMs, String trigger,
@@ -213,8 +243,10 @@ public final class WatchdogMonitor {
                 .append("observedTicks=").append(TICK_COUNT.get()).append('\n')
                 .append("lastCompletedServerTickMs=").append(LAST_SERVER_TICK_NANOS.get() / 1_000_000L).append('\n')
                 .append("lastCompletedClientTickMs=").append(LAST_CLIENT_TICK_NANOS.get() / 1_000_000L).append('\n')
+                .append("lastCompletedRenderFrameMs=").append(LAST_RENDER_FRAME_NANOS.get() / 1_000_000L).append('\n')
                 .append("serverThread=").append(threadName(serverThread)).append('\n')
                 .append("clientThread=").append(threadName(clientThread)).append('\n')
+                .append("renderThread=").append(threadName(renderThread)).append('\n')
                 .append("triggerThread=").append(threadName(targetThread)).append('\n')
                 .append("triggerThreadId=").append(targetThread == null ? -1 : targetThread.getId()).append('\n')
                 .append("thresholdMs=").append(stallThresholdMs).append('\n');
@@ -242,7 +274,7 @@ public final class WatchdogMonitor {
         long targetId = targetThread == null ? -1L : targetThread.getId();
 
         // Put the stalled thread first, then collect every live JVM thread.
-        long[] orderedIds = new long[allIds.length];
+        long[] orderedIds = new long[allIds.length + (targetId > 0 ? 1 : 0)];
         int selected = 0;
         if (targetId > 0) orderedIds[selected++] = targetId;
         for (long id : allIds) {
