@@ -55,7 +55,7 @@ public final class WatchdogMonitor {
     private static volatile Thread renderThread;
     private static volatile long stallThresholdMs = 2_000;
     private static volatile long repeatIntervalMs = 2_000;
-    private static volatile int maxDumpsPerStall = 8;
+    private static volatile int maxDumpsPerStall = 20;
     private static volatile int stackDepth = 32;
 
     private WatchdogMonitor() {}
@@ -329,7 +329,7 @@ public final class WatchdogMonitor {
             if (Files.notExists(config)) {
                 properties.setProperty("stallThresholdMs", "2000");
                 properties.setProperty("repeatIntervalMs", "2000");
-                properties.setProperty("maxDumpsPerStall", "8");
+                properties.setProperty("maxDumpsPerStall", "20");
                 properties.setProperty("stackDepth", "32");
                 properties.setProperty("configVersion", "2");
                 try (var writer = Files.newBufferedWriter(config, StandardCharsets.UTF_8,
@@ -346,9 +346,6 @@ public final class WatchdogMonitor {
                 if ("5000".equals(properties.getProperty("repeatIntervalMs"))) {
                     properties.setProperty("repeatIntervalMs", "2000");
                 }
-                if ("20".equals(properties.getProperty("maxDumpsPerStall"))) {
-                    properties.setProperty("maxDumpsPerStall", "8");
-                }
                 if ("48".equals(properties.getProperty("stackDepth"))) {
                     properties.setProperty("stackDepth", "32");
                 }
@@ -361,7 +358,7 @@ public final class WatchdogMonitor {
 
             stallThresholdMs = boundedLong(properties, "stallThresholdMs", 2_000, 250, 60_000);
             repeatIntervalMs = boundedLong(properties, "repeatIntervalMs", 2_000, 500, 60_000);
-            maxDumpsPerStall = (int) boundedLong(properties, "maxDumpsPerStall", 8, 1, 100);
+            maxDumpsPerStall = (int) boundedLong(properties, "maxDumpsPerStall", 20, 1, 100);
             stackDepth = (int) boundedLong(properties, "stackDepth", 32, 8, 128);
         } catch (IOException | RuntimeException exception) {
             LOGGER.warn("Could not load config/savewatch.properties; using safe defaults.", exception);
