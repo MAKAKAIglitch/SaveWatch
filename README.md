@@ -9,7 +9,7 @@
 - Java: 21
 - Mod ID: `savewatch`
 
-## Features in 0.4.0
+## Features in 0.5.0
 
 ### Stall watchdog
 - Watches server ticks, client ticks, and render frames independently.
@@ -35,13 +35,20 @@
 
 ### Reports and commands
 - Writes snapshots to `logs/savewatch/`.
+- Enforces a **256 MiB total folder limit** by removing the oldest completed files first; active temporary files are skipped. Change `maxLogSizeMiB` in config.
+- Generates a compact `ai-summary.md` with key timings and links to the full snapshots/JFR files.
+- `/savewatch ai` regenerates the AI summary; `/savewatch links` prints clickable in-game links to the HTML report, AI summary, and newest dump (local single-player worlds).
+- HTML report is Russian-localized and includes heap, GC, MSPT and FPS graphs plus links to the underlying evidence.
+- Experimental Spark presence detection is optional and dependency-free; SaveWatch still works normally without Spark.
 - Automatically generates a self-contained offline HTML report at `logs/savewatch/index.html` after a monitored stall ends.
 - The HTML report highlights detected deadlocks, JFR export status, heap/GC history, repeated stack frames, and potentially involved mods.
 - `/savewatch status` — current server/client/render timing, rolling TPS/MSPT/FPS statistics, snapshot queue depth, and heap summary.
 - `/savewatch dump` — queue a manual JVM/thread snapshot.
 - `/savewatch report` — regenerate the HTML report from existing snapshots.
+- `/savewatch ai` — regenerate compact AI-ready Markdown summary.
+- `/savewatch links` — show clickable local file links in chat.
 
-Defaults: 2-second stall threshold, 2-second interval between snapshots, maximum 20 snapshots per continuous stall, 32 stack frames per thread, JFR enabled with a 60-second rolling window, a 64 MiB recording cap, and the four newest exported JFR files.
+Defaults: 256 MiB log folder cap, Russian messages, 2-second stall threshold, 2-second interval between snapshots, maximum 20 snapshots per continuous stall, 32 stack frames per thread, JFR enabled with a 60-second rolling window, a 64 MiB recording cap, and the four newest exported JFR files.
 
 ## Configuration
 
@@ -57,6 +64,8 @@ After first launch, edit `config/savewatch.properties`:
 | `jfrMaxAgeSeconds` | 60 | 10–600 | Maximum age of retained JFR events |
 | `jfrMaxSizeMiB` | 64 | 16–512 | Maximum rolling JFR repository size |
 | `jfrMaxExports` | 4 | 1–20 | Number of exported JFR files to retain |
+| `maxLogSizeMiB` | 256 | 32–4096 | Aggregate `logs/savewatch` size limit; oldest files are removed first |
+| `language` | `ru` | `ru` / `en` | Language for in-game status output; Russian is the default |
 
 Existing configuration files are migrated by adding new keys while preserving customized values.
 
