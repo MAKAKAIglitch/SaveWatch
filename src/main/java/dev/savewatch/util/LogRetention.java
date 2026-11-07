@@ -16,7 +16,7 @@ public final class LogRetention {
             var files = stream.filter(Files::isRegularFile)
                     .filter(path -> {
                         String name = path.getFileName().toString().toLowerCase(java.util.Locale.ROOT);
-                        return !name.endsWith(".tmp") && !name.equals("index.html") && !name.equals("ai-summary.md");
+                        return !name.endsWith(".tmp");
                     })
                     .sorted(Comparator.comparingLong(LogRetention::modified))
                     .toList();
