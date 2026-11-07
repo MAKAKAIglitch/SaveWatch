@@ -28,7 +28,7 @@ The builder reuses Gradle's daemon and build cache for faster repeat builds. No 
 - Collects thread stacks without the more expensive full monitor/synchronizer enumeration.
 - Captures JVM heap, non-heap, garbage-collection counters, thread states, and basic lock-owner information.
 - Writes diagnostic snapshots to `logs/savewatch/`.
-- Automatically generates a self-contained offline HTML report at `logs/savewatch/index.html` after a monitored long tick or render frame finishes.
+- Automatically generates a self-contained offline HTML report at `logs/savewatch/index.html` after a monitored server/client tick or render frame finishes.
 - `/savewatch report` regenerates the HTML report on demand; report generation runs on a background daemon thread.
 - Operator commands:
   - `/savewatch status` — tick progress and heap summary.
