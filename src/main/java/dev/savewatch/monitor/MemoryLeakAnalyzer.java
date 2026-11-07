@@ -26,7 +26,8 @@ public final class MemoryLeakAnalyzer {
     private static final long MIN_WINDOW_NANOS = 180_000_000_000L;
 
     private static final Deque<Sample> SAMPLES = new ArrayDeque<>();
-    private static MinecraftServer trackedServer;\n    private static long lastGcCount = -1;
+    private static MinecraftServer trackedServer;
+    private static long lastGcCount = -1;
     private static long lastSampleNanos;
     private static long lastAlertNanos;
 
@@ -34,6 +35,13 @@ public final class MemoryLeakAnalyzer {
 
     /** Returns a warning when a new alert is due; called from the logical server tick. */
     public static synchronized String tick(MinecraftServer server) {
+        if (trackedServer != server) {
+            trackedServer = server;
+            SAMPLES.clear();
+            lastGcCount = -1;
+            lastSampleNanos = 0;
+            lastAlertNanos = 0;
+        }
         if (!SaveWatchConfig.MEMORY_LEAK_ANALYZER.get()) return null;
 
         long now = System.nanoTime();
