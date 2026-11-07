@@ -15,6 +15,10 @@ import java.nio.file.StandardOpenOption;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Properties;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import net.minecraft.commands.CommandSourceStack;
@@ -40,6 +44,17 @@ public final class WatchdogMonitor {
     private static final AtomicLong LAST_CLIENT_TICK_NANOS = new AtomicLong();
     private static final AtomicLong LAST_RENDER_FRAME_NANOS = new AtomicLong();
     private static final AtomicLong TICK_COUNT = new AtomicLong();
+    private static final AtomicLong SNAPSHOT_SEQUENCE = new AtomicLong();
+
+    // A bounded serial queue prevents simultaneous server/client/render stalls from
+    // silently discarding snapshots while keeping all filesystem work off game threads.
+    private static final ThreadPoolExecutor SNAPSHOT_WRITER = new ThreadPoolExecutor(
+            1, 1, 0L, TimeUnit.MILLISECONDS, new ArrayBlockingQueue<>(64), task -> {
+                Thread thread = new Thread(task, "SaveWatch Snapshot Writer");
+                thread.setDaemon(true);
+                thread.setPriority(Thread.NORM_PRIORITY - 1);
+                return thread;
+            }, new ThreadPoolExecutor.AbortPolicy());
 
     private static final AtomicLong LAST_SERVER_DUMP_NANOS = new AtomicLong();
     private static final AtomicLong LAST_CLIENT_DUMP_NANOS = new AtomicLong();
@@ -49,7 +64,6 @@ public final class WatchdogMonitor {
     private static final AtomicLong RENDER_DUMPS_THIS_STALL = new AtomicLong();
 
     private static final AtomicBoolean STARTED = new AtomicBoolean();
-    private static final AtomicBoolean WRITING = new AtomicBoolean();
     private static final AtomicBoolean REPORT_REQUESTED = new AtomicBoolean();
     private static final AtomicBoolean REPORT_WRITING = new AtomicBoolean();
 
@@ -60,12 +74,16 @@ public final class WatchdogMonitor {
     private static volatile long repeatIntervalMs = 2_000;
     private static volatile int maxDumpsPerStall = 20;
     private static volatile int stackDepth = 32;
+    private static volatile boolean jfrEnabled = true;
+    private static volatile long jfrMaxAgeSeconds = 60;
+    private static volatile long jfrMaxSizeMiB = 64;
 
     private WatchdogMonitor() {}
 
     public static void start() {
         loadConfig();
         if (!STARTED.compareAndSet(false, true)) return;
+        JfrRecorder.start(jfrEnabled, jfrMaxAgeSeconds, jfrMaxSizeMiB);
 
         Thread watchdog = new Thread(WatchdogMonitor::watchLoop, "SaveWatch Watchdog");
         watchdog.setDaemon(true);
@@ -169,7 +187,6 @@ public final class WatchdogMonitor {
 
         long previousDump = lastDump.get();
         if (previousDump != 0 && now - previousDump < repeatIntervalMs * 1_000_000L) return;
-        if (WRITING.get()) return;
         if (!lastDump.compareAndSet(previousDump, now)) return;
 
         dumpCount.incrementAndGet();
@@ -178,7 +195,10 @@ public final class WatchdogMonitor {
             case "LONG_CLIENT_TICK" -> "client";
             default -> "render";
         };
-        queueSnapshot(reason, elapsedMs, trigger, targetThread);
+        if (!queueSnapshot(reason, elapsedMs, trigger, targetThread)) {
+            dumpCount.decrementAndGet();
+            lastDump.compareAndSet(now, previousDump);
+        }
     }
 
     private static long currentTickDurationMs() {
@@ -208,26 +228,21 @@ public final class WatchdogMonitor {
                 + " | heap max=" + formatMiB(runtime.maxMemory()) + " MiB";
     }
 
-    private static void queueSnapshot(String reason, long tickDurationMs, String trigger,
-                                      Thread targetThread) {
-        if (!WRITING.compareAndSet(false, true)) return;
-
-        Thread writer = new Thread(() -> {
-            try {
-                writeSnapshot(reason, tickDurationMs, trigger, targetThread);
-            } finally {
-                WRITING.set(false);
-                if ("MANUAL_COMMAND".equals(reason)) queueHtmlReport();
-                else if (REPORT_REQUESTED.get()) startReportWorker();
-            }
-        }, "SaveWatch Snapshot Writer");
-        writer.setDaemon(true);
-        writer.setPriority(Thread.NORM_PRIORITY - 1);
+    private static boolean queueSnapshot(String reason, long tickDurationMs, String trigger,
+                                         Thread targetThread) {
         try {
-            writer.start();
-        } catch (RuntimeException exception) {
-            WRITING.set(false);
-            throw exception;
+            SNAPSHOT_WRITER.execute(() -> {
+                try {
+                    writeSnapshot(reason, tickDurationMs, trigger, targetThread);
+                } finally {
+                    if ("MANUAL_COMMAND".equals(reason)) queueHtmlReport();
+                    else if (REPORT_REQUESTED.get()) startReportWorker();
+                }
+            });
+            return true;
+        } catch (RejectedExecutionException exception) {
+            LOGGER.warn("Snapshot queue is full; diagnostic event was not queued (reason={}).", reason);
+            return false;
         }
     }
 
@@ -235,10 +250,13 @@ public final class WatchdogMonitor {
                                       Thread targetThread) {
         try {
             long captureStarted = System.nanoTime();
-            String report = buildReport(reason, tickDurationMs, trigger, targetThread, captureStarted);
             Path directory = Path.of("logs", "savewatch");
             Files.createDirectories(directory);
-            String filename = "savewatch-" + FILE_TIME.format(LocalDateTime.now()) + ".txt";
+            long sequence = SNAPSHOT_SEQUENCE.incrementAndGet();
+            String suffix = FILE_TIME.format(LocalDateTime.now()) + "-" + sequence;
+            String jfrFile = JfrRecorder.dumpIfDue(directory.resolve("savewatch-" + suffix + ".jfr"), 30_000);
+            String report = buildReport(reason, tickDurationMs, trigger, targetThread, captureStarted, jfrFile);
+            String filename = "savewatch-" + suffix + ".txt";
             Path output = directory.resolve(filename);
             Files.writeString(output, report, StandardCharsets.UTF_8,
                     StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
@@ -250,7 +268,7 @@ public final class WatchdogMonitor {
     }
 
     private static String buildReport(String reason, long tickDurationMs, String trigger,
-                                      Thread targetThread, long captureStarted) {
+                                      Thread targetThread, long captureStarted, String jfrFile) {
         StringBuilder out = new StringBuilder(32_768);
         out.append("SaveWatch diagnostic report\n")
                 .append("version=0.3.0\n")
@@ -267,7 +285,8 @@ public final class WatchdogMonitor {
                 .append("renderThread=").append(threadName(renderThread)).append('\n')
                 .append("triggerThread=").append(threadName(targetThread)).append('\n')
                 .append("triggerThreadId=").append(targetThread == null ? -1 : targetThread.getId()).append('\n')
-                .append("thresholdMs=").append(stallThresholdMs).append('\n');
+                .append("thresholdMs=").append(stallThresholdMs).append('\n')
+                .append("jfrFile=").append(jfrFile).append('\n');
 
         Runtime runtime = Runtime.getRuntime();
         out.append("\n[JVM]\n")
@@ -286,8 +305,29 @@ public final class WatchdogMonitor {
                     .append(" totalMs=").append(gc.getCollectionTime()).append('\n');
         }
 
-        out.append("\n[THREADS]\n");
         ThreadMXBean threadBean = ManagementFactory.getThreadMXBean();
+        long[] deadlockedIds = null;
+        try {
+            deadlockedIds = threadBean.findDeadlockedThreads();
+        } catch (UnsupportedOperationException | SecurityException exception) {
+            LOGGER.debug("JVM does not permit deadlock detection.", exception);
+        }
+        out.append("deadlockDetected=").append(deadlockedIds != null && deadlockedIds.length > 0).append('\n')
+                .append("deadlockedThreadCount=").append(deadlockedIds == null ? 0 : deadlockedIds.length).append('\n');
+        if (deadlockedIds != null && deadlockedIds.length > 0) {
+            out.append("\n[DEADLOCKS]\n");
+            ThreadInfo[] deadlocked = threadBean.getThreadInfo(deadlockedIds, true, true);
+            for (ThreadInfo info : deadlocked) {
+                if (info == null) continue;
+                out.append("thread=").append(info.getThreadName()).append(" id=").append(info.getThreadId())
+                        .append(" state=").append(info.getThreadState())
+                        .append(" waitingOn=").append(info.getLockName())
+                        .append(" lockOwner=").append(info.getLockOwnerName()).append('\n');
+                for (StackTraceElement frame : info.getStackTrace()) out.append("    at ").append(frame).append('\n');
+            }
+        }
+
+        out.append("\n[THREADS]\n");
         long[] allIds = threadBean.getAllThreadIds();
         long targetId = targetThread == null ? -1L : targetThread.getId();
 
@@ -311,9 +351,12 @@ public final class WatchdogMonitor {
         for (ThreadInfo info : infos) {
             if (info == null) continue;
             capturedThreads++;
+            long cpuNanos = threadBean.isThreadCpuTimeSupported() && threadBean.isThreadCpuTimeEnabled()
+                    ? threadBean.getThreadCpuTime(info.getThreadId()) : -1L;
             out.append("\n--- ").append(info.getThreadName())
                     .append(" | id=").append(info.getThreadId())
-                    .append(" | state=").append(info.getThreadState());
+                    .append(" | state=").append(info.getThreadState())
+                    .append(" | cpuTimeMs=").append(cpuNanos < 0 ? "unavailable" : cpuNanos / 1_000_000L);
             if (info.getLockName() != null) out.append(" | waitingOn=").append(info.getLockName());
             if (info.getLockOwnerName() != null) out.append(" | lockOwner=").append(info.getLockOwnerName());
             out.append(" ---\n");
@@ -336,7 +379,8 @@ public final class WatchdogMonitor {
     }
 
     private static void startReportWorker() {
-        if (WRITING.get() || !REPORT_WRITING.compareAndSet(false, true)) return;
+        if (SNAPSHOT_WRITER.getActiveCount() > 0 || !SNAPSHOT_WRITER.getQueue().isEmpty()
+                || !REPORT_WRITING.compareAndSet(false, true)) return;
         Thread worker = new Thread(() -> {
             try {
                 while (REPORT_REQUESTED.getAndSet(false)) {
@@ -349,7 +393,8 @@ public final class WatchdogMonitor {
                 }
             } finally {
                 REPORT_WRITING.set(false);
-                if (REPORT_REQUESTED.get() && !WRITING.get()) startReportWorker();
+                if (REPORT_REQUESTED.get() && SNAPSHOT_WRITER.getActiveCount() == 0
+                        && SNAPSHOT_WRITER.getQueue().isEmpty()) startReportWorker();
             }
         }, "SaveWatch HTML Report Writer");
         worker.setDaemon(true);
@@ -376,7 +421,10 @@ public final class WatchdogMonitor {
                 properties.setProperty("repeatIntervalMs", "2000");
                 properties.setProperty("maxDumpsPerStall", "20");
                 properties.setProperty("stackDepth", "32");
-                properties.setProperty("configVersion", "2");
+                properties.setProperty("jfrEnabled", "true");
+                properties.setProperty("jfrMaxAgeSeconds", "60");
+                properties.setProperty("jfrMaxSizeMiB", "64");
+                properties.setProperty("configVersion", "3");
                 try (var writer = Files.newBufferedWriter(config, StandardCharsets.UTF_8,
                         StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)) {
                     properties.store(writer, "SaveWatch 0.3.0 settings");
@@ -405,6 +453,9 @@ public final class WatchdogMonitor {
             repeatIntervalMs = boundedLong(properties, "repeatIntervalMs", 2_000, 500, 60_000);
             maxDumpsPerStall = (int) boundedLong(properties, "maxDumpsPerStall", 20, 1, 100);
             stackDepth = (int) boundedLong(properties, "stackDepth", 32, 8, 128);
+            jfrEnabled = Boolean.parseBoolean(properties.getProperty("jfrEnabled", "true"));
+            jfrMaxAgeSeconds = boundedLong(properties, "jfrMaxAgeSeconds", 60, 10, 600);
+            jfrMaxSizeMiB = boundedLong(properties, "jfrMaxSizeMiB", 64, 16, 512);
         } catch (IOException | RuntimeException exception) {
             LOGGER.warn("Could not load config/savewatch.properties; using safe defaults.", exception);
         }
