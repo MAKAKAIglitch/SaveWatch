@@ -74,6 +74,17 @@ public final class HtmlReportGenerator {
                 if (!line.isBlank()) snapshot.gc.add(line);
                 continue;
             }
+            if ("MOD_ATTRIBUTION".equals(section)) {
+                if (!line.isBlank()) {
+                    String[] fields = line.split("\\t", -1);
+                    if (fields.length >= 8) {
+                        snapshot.mods.add(new ModEvidence(fields[0], fields[1], fields[2],
+                                integer(fields[3]), integer(fields[4]), integer(fields[5]),
+                                fields[6], fields[7]));
+                    }
+                }
+                continue;
+            }
             if ("THREADS".equals(section)) {
                 Matcher header = HEADER.matcher(line);
                 if (header.matches()) {
@@ -114,18 +125,47 @@ public final class HtmlReportGenerator {
             durations.add(duration);
             if (duration != null) longest = Math.max(longest, duration);
 
-            for (ThreadDump thread : snapshot.threads) {
-                for (Frame frame : thread.frames) {
-                    Matcher matcher = MOD.matcher(frame.text);
-                    while (matcher.find()) {
-                        String id = matcher.group(1);
-                        if (Set.of("minecraft", "neoforge", "fml_loader", "java").contains(id.toLowerCase())) continue;
-                        ModHit hit = mods.computeIfAbsent(id, ignored -> new ModHit(id));
-                        hit.total++;
-                        if (thread == snapshot.focus) {
-                            hit.trigger++;
-                            if (hit.anchor == null) {
-                                hit.anchor = "dump-" + reportIndex + "-thread-" + thread.id + "-line-" + frame.line;
+            if (!snapshot.mods.isEmpty()) {
+                for (ModEvidence evidence : snapshot.mods) {
+                    ModHit hit = mods.computeIfAbsent(evidence.id, ignored ->
+                            new ModHit(evidence.id, evidence.displayName, evidence.version));
+                    hit.trigger += evidence.triggerFrames;
+                    hit.total += evidence.triggerFrames + evidence.otherThreadFrames;
+                    hit.other += evidence.otherThreadFrames;
+                    hit.topTriggerFrames += evidence.topTriggerFrames;
+                    if (evidence.triggerFrames > 0) hit.triggerSnapshots++;
+                    if (hit.firstFrame == null && evidence.firstTriggerFrame != null
+                            && !evidence.firstTriggerFrame.isBlank()) {
+                        hit.firstFrame = evidence.firstTriggerFrame;
+                        if (snapshot.focus != null) {
+                            for (Frame frame : snapshot.focus.frames) {
+                                if (frame.text.equals(evidence.firstTriggerFrame)) {
+                                    hit.anchor = "dump-" + reportIndex + "-thread-" + snapshot.focus.id
+                                            + "-line-" + frame.line;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+            } else {
+                for (ThreadDump thread : snapshot.threads) {
+                    for (Frame frame : thread.frames) {
+                        Matcher matcher = MOD.matcher(frame.text);
+                        while (matcher.find()) {
+                            String id = matcher.group(1);
+                            if (Set.of("minecraft", "neoforge", "fml_loader", "java").contains(id.toLowerCase())) continue;
+                            ModHit hit = mods.computeIfAbsent(id, ignored -> new ModHit(id, id, "unknown"));
+                            hit.total++;
+                            if (thread == snapshot.focus) {
+                                hit.trigger++;
+                                hit.triggerSnapshots++;
+                                if (hit.anchor == null) {
+                                    hit.anchor = "dump-" + reportIndex + "-thread-" + thread.id + "-line-" + frame.line;
+                                    hit.firstFrame = frame.text;
+                                }
+                            } else {
+                                hit.other++;
                             }
                         }
                     }
@@ -205,23 +245,30 @@ public final class HtmlReportGenerator {
                         .append(shared.size()).append(" shared).</p>");
             }
         }
-        out.append("</section><h2 id=\"mods\">Возможные участники — моды</h2><section class=\"panel\">")
-                .append("<p>Сортировка по встречаемости в потоке-триггере. Это зацепки для проверки, а не доказательство вины.</p>")
-                .append("<table><thead><tr><th>Mod ID</th><th>Trigger stack hits</th><th>All-thread hits</th><th>Exact frame</th></tr></thead><tbody>");
+        out.append("</section><h2 id=\"mods\">Кандидаты на проверку — моды</h2><section class=\"panel\">")
+                .append("<p>Атрибуция строится по классам, найденным в JAR модов, и маркерам ModLauncher. Повторение в потоке зависания и верхних кадрах повышает приоритет проверки, но не доказывает причинность.</p>")
+                .append("<table><thead><tr><th>Мод</th><th>Сигнал</th><th>Дампы с участием</th><th>Кадры триггера</th><th>Другие потоки</th><th>Первый кадр</th></tr></thead><tbody>");
 
-        List<ModHit> sortedМоды = mods.values().stream().filter(hit -> hit.trigger > 0)
-                .sorted(Comparator.comparingInt((ModHit hit) -> hit.trigger).reversed()).toList();
-        if (sortedМоды.isEmpty()) {
-            out.append("<tr><td colspan=\"4\" class=\"muted\">В стеке потока-триггера не найдены пакеты модов.</td></tr>");
+        List<ModHit> sortedMods = mods.values().stream().filter(hit -> hit.trigger > 0)
+                .sorted(Comparator.comparingInt(ModHit::score).reversed()
+                        .thenComparing(hit -> hit.displayName, String.CASE_INSENSITIVE_ORDER))
+                .limit(30).toList();
+        if (sortedMods.isEmpty()) {
+            out.append("<tr><td colspan=\"6\" class=\"muted\">В стеках триггерных потоков не удалось сопоставить классы с модами. Проверьте полные дампы и JFR.</td></tr>");
         } else {
-            for (ModHit hit : sortedМоды) {
-                out.append("<tr><td><code>").append(escape(hit.id)).append("</code></td><td>")
-                        .append(hit.trigger).append("</td><td>").append(hit.total).append("</td><td><a href=\"#")
-                        .append(escape(hit.anchor)).append("\">open exact frame</a></td></tr>");
+            for (ModHit hit : sortedMods) {
+                out.append("<tr><td><b>").append(escape(hit.displayName)).append("</b><br><code>")
+                        .append(escape(hit.id)).append("</code><br><small>").append(escape(hit.version))
+                        .append("</small></td><td><b>").append(escape(hit.confidence())).append("</b><br><small>score ")
+                        .append(hit.score()).append("</small></td><td>").append(hit.triggerSnapshots)
+                        .append("</td><td>").append(hit.trigger).append(" (верхних: ").append(hit.topTriggerFrames)
+                        .append(")</td><td>").append(hit.other).append("</td><td>");
+                if (hit.anchor != null) out.append("<a href=\"#").append(escape(hit.anchor)).append("\">");
+                out.append("<code>").append(escape(hit.firstFrame == null ? "—" : hit.firstFrame)).append("</code>");
+                if (hit.anchor != null) out.append("</a>");
+                out.append("</td></tr>");
             }
         }
-        out.append("</tbody></table></section><h2 id=\"dumps\">Дампы потоков</h2>")
-                .append("<p>Раскрой поток, чтобы посмотреть стек. Ссылки ведут к конкретным кадрам.</p>");
 
         for (int reportIndex = 0; reportIndex < snapshots.size(); reportIndex++) {
             Snapshot snapshot = snapshots.get(reportIndex);
@@ -348,6 +395,7 @@ public final class HtmlReportGenerator {
         final Map<String, String> values = new LinkedHashMap<>();
         final List<String> gc = new ArrayList<>();
         final List<ThreadDump> threads = new ArrayList<>();
+        final List<ModEvidence> mods = new ArrayList<>();
         ThreadDump focus;
         int totalLines;
         Snapshot(Path path) { this.path = path; }
@@ -363,12 +411,41 @@ public final class HtmlReportGenerator {
     }
 
     private record Frame(String text, int line) {}
+    private record ModEvidence(String id, String displayName, String version,
+                               int triggerFrames, int otherThreadFrames, int topTriggerFrames,
+                               String firstTriggerFrame, String firstThreadName) {}
+
+    private static int integer(String value) {
+        try { return Integer.parseInt(value); } catch (RuntimeException ignored) { return 0; }
+    }
+
     private static final class ModHit {
         final String id;
+        final String displayName;
+        final String version;
         int trigger;
         int total;
+        int other;
+        int topTriggerFrames;
+        int triggerSnapshots;
         String anchor;
-        ModHit(String id) { this.id = id; }
+        String firstFrame;
+
+        ModHit(String id, String displayName, String version) {
+            this.id = id;
+            this.displayName = displayName;
+            this.version = version;
+        }
+
+        int score() {
+            return triggerSnapshots * 10 + topTriggerFrames * 3 + trigger * 2 + Math.min(other, 20);
+        }
+
+        String confidence() {
+            if (triggerSnapshots >= 2 && topTriggerFrames >= 2) return "Сильный сигнал";
+            if (triggerSnapshots >= 2 || trigger >= 3 || topTriggerFrames > 0) return "Возможная связь";
+            return "Слабый сигнал";
+        }
     }
 
     private static final String CSS = """
