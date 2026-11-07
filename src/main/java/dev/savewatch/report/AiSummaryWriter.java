@@ -65,8 +65,9 @@ public final class AiSummaryWriter {
         if (!snapshots.isEmpty()) {
             Map<String, String> latest = readHeader(snapshots.get(0));
             for (String key : List.of("trigger", "tickDurationMs", "lastCompletedServerTickMs",
-                    "lastCompletedClientTickMs", "lastCompletedRenderFrameMs", "heapUsedMiB",
-                    "heapMaxMiB", "deadlockDetected", "deadlockedThreadCount", "sparkDetected")) {
+                    "lastCompletedClientTickMs", "lastCompletedRenderFrameMs", "serverTps", "serverMsptAvg",
+                    "serverMsptP95", "serverMsptMax", "clientFpsAvg", "clientFps1Low",
+                    "heapUsedMiB", "heapMaxMiB", "deadlockDetected", "deadlockedThreadCount", "sparkDetected")) {
                 if (latest.containsKey(key)) out.append("- ").append(key).append(": **")
                         .append(latest.get(key)).append("**\n");
             }
