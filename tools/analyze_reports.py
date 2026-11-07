@@ -39,6 +39,11 @@ class Report:
         expected = self.values.get("serverThread", "")
         return next((thread for thread in self.threads if thread.name == expected), None)
 
+    @property
+    def focus_thread(self) -> ThreadSnapshot | None:
+        expected = self.values.get("triggerThread") or self.values.get("serverThread", "")
+        return next((thread for thread in self.threads if thread.name == expected), None)
+
 
 def parse_report(path: Path) -> Report:
     report = Report(path=path)
@@ -115,12 +120,12 @@ def render_summary(reports: list[Report], top: int) -> str:
             durations.append((int(report.values.get("tickDurationMs", "0")), report))
         except ValueError:
             pass
-        server = report.server_thread
-        if server is None:
+        focus = report.focus_thread
+        if focus is None:
             missing_server += 1
             continue
-        states[server.state] += 1
-        frame_counts.update(server.frames)
+        states[focus.state] += 1
+        frame_counts.update(focus.frames)
 
     lines += [
         f"- Time range: **{reports[0].values.get('timestamp', 'unknown')}** to **{reports[-1].values.get('timestamp', 'unknown')}**",
@@ -136,11 +141,11 @@ def render_summary(reports: list[Report], top: int) -> str:
         ]
 
     if states:
-        lines += ["", "## Server-thread states", ""]
+        lines += ["", "## Trigger-thread states", ""]
         lines += [f"- {state}: {count} snapshot(s)" for state, count in states.most_common()]
 
     if frame_counts:
-        lines += ["", f"## Most repeated server-thread stack frames (top {top})", ""]
+        lines += ["", f"## Most repeated trigger-thread stack frames (top {top})", ""]
         lines += [
             f"{index}. {frame} — present in **{count}** captured stack(s)"
             for index, (frame, count) in enumerate(frame_counts.most_common(top), start=1)
@@ -152,12 +157,13 @@ def render_summary(reports: list[Report], top: int) -> str:
 
     lines += ["", "## Per-snapshot details", ""]
     for report in reports:
-        server = report.server_thread
+        focus = report.focus_thread
         duration = report.values.get("tickDurationMs", "unknown")
-        state = server.state if server else "server thread not found"
-        top_frame = server.frames[0] if server and server.frames else "no stack frame"
+        focus_name = report.values.get("triggerThread") or report.values.get("serverThread", "unknown")
+        state = focus.state if focus else "trigger thread not found"
+        top_frame = focus.frames[0] if focus and focus.frames else "no stack frame"
         lines.append(
-            f"- {report.path.name} — tick **{duration} ms**, server state **{state}**, top frame: {top_frame}"
+            f"- {report.path.name} — tick/frame **{duration} ms**, trigger **{focus_name}**, state **{state}**, top frame: {top_frame}"
         )
 
     lines += [
