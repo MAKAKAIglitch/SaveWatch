@@ -2,6 +2,7 @@ package dev.savewatch.monitor;
 
 import java.io.IOException;
 import java.nio.file.Path;
+import java.text.ParseException;
 import java.time.Duration;
 import jdk.jfr.Configuration;
 import jdk.jfr.Recording;
@@ -37,7 +38,7 @@ public final class JfrRecorder {
             recording = next;
             LOGGER.info("JFR rolling recording started (maxAge={}s, maxSize={}MiB).",
                     maxAgeSeconds, maxSizeMiB);
-        } catch (IOException | RuntimeException exception) {
+        } catch (IOException | ParseException | RuntimeException exception) {
             recording = null;
             LOGGER.warn("Could not start JFR recording; thread snapshots will remain available.", exception);
         }
