@@ -345,7 +345,7 @@ public final class WatchdogMonitor {
                                       Thread targetThread, long captureStarted, String jfrFile) {
         StringBuilder out = new StringBuilder(32_768);
         out.append("SaveWatch diagnostic report\n")
-                .append("version=0.3.0\n")
+                .append("version=0.4.0\n")
                 .append("reason=").append(reason).append('\n')
                 .append("trigger=").append(trigger).append('\n')
                 .append("timestamp=").append(LocalDateTime.now()).append('\n')
