@@ -162,7 +162,12 @@ public final class WatchdogMonitor {
         if (!lastDump.compareAndSet(previousDump, now)) return;
 
         dumpCount.incrementAndGet();
-        queueSnapshot(reason, elapsedMs, reason.equals("LONG_CLIENT_TICK") ? "client" : "server", targetThread);
+        String trigger = switch (reason) {
+            case "LONG_SERVER_TICK" -> "server";
+            case "LONG_CLIENT_TICK" -> "client";
+            default -> "render";
+        };
+        queueSnapshot(reason, elapsedMs, trigger, targetThread);
     }
 
     private static long currentTickDurationMs() {
@@ -187,7 +192,7 @@ public final class WatchdogMonitor {
                 + " | last render frame=" + LAST_RENDER_FRAME_NANOS.get() / 1_000_000L + "ms"
                 + (inServerTick ? " | current tick=" + currentTickDurationMs() + "ms" : "")
                 + (inClientTick ? " | client tick active" : "")
-                + (RENDER_FRAME_STARTED_NANOS.get() != 0 ? " | render frame active" : "")
+                + (RENDER_FRAME_STARTED_NANOS.get() != 0 ? " | current render frame=" + currentTickDurationMs() + "ms" : "")
                 + " | heap used=" + formatMiB(used) + " MiB"
                 + " | heap max=" + formatMiB(runtime.maxMemory()) + " MiB";
     }
