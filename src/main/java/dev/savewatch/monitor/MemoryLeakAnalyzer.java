@@ -26,7 +26,7 @@ public final class MemoryLeakAnalyzer {
     private static final long MIN_WINDOW_NANOS = 180_000_000_000L;
 
     private static final Deque<Sample> SAMPLES = new ArrayDeque<>();
-    private static long lastGcCount = -1;
+    private static MinecraftServer trackedServer;\n    private static long lastGcCount = -1;
     private static long lastSampleNanos;
     private static long lastAlertNanos;
 
@@ -77,7 +77,7 @@ public final class MemoryLeakAnalyzer {
         lastAlertNanos = now;
 
         String message = String.format(Locale.ROOT,
-                "SaveWatch: обнаружен устойчивый рост памяти после GC — +%.1f МиБ за %.1f мин (%.2f МиБ/мин), занято %.1f%% heap. Это экспериментальное подозрение на утечку, не доказательство. Подробности: logs/savewatch/index.html",
+                "SaveWatch: обнаружен устойчивый рост памяти после GC — +%.1f МиБ за %.1f мин (%.2f МиБ/мин), занято %.1f%% heap. Это экспериментальное подозрение на утечку, не доказательство. Подробности сохранены в logs/savewatch/",
                 growthBytes / (1024.0 * 1024.0), elapsed / 60_000_000_000.0,
                 growthMiBPerMinute, heapPercent);
         LOGGER.warn(message);
