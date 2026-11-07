@@ -169,6 +169,7 @@ public final class HtmlReportGenerator {
                 .append("<section class=\"panel\"><h3>Использование памяти</h3><canvas id=\"heap\" class=\"chart\"></canvas><p>Heap used / maximum, MiB.</p></section>")
                 .append("<section class=\"panel\"><h3>Суммарное время GC</h3><canvas id=\"gc\" class=\"chart\"></canvas><p>Накопительный счётчик JVM.</p></section>")
                 .append("<section class=\"panel\"><h3>MSPT сервера</h3><canvas id=\"mspt\" class=\"chart\"></canvas><p>Среднее и максимум времени тика.</p></section>")
+                .append("<section class=\"panel\"><h3>TPS сервера</h3><canvas id=\"tps\" class=\"chart\"></canvas><p>Расчётная частота тиков, максимум 20 TPS.</p></section>")
                 .append("<section class=\"panel\"><h3>FPS клиента</h3><canvas id=\"fps\" class=\"chart\"></canvas><p>Средний FPS на момент дампа.</p></section></div>")
                 .append("<h2 id=\"timeline\">Хронология зависаний</h2><div class=\"timeline\">");
 
@@ -279,11 +280,12 @@ public final class HtmlReportGenerator {
                     .append(",gc:").append(gcTotal(snapshot))
                     .append(",mspt:").append(jsonNumber(snapshot.values.get("serverMsptAvg")))
                     .append(",msptMax:").append(jsonNumber(snapshot.values.get("serverMsptMax")))
-                    .append(",fps:").append(jsonNumber(snapshot.values.get("clientFpsAvg"))).append('}');
+                    .append(",fps:").append(jsonNumber(snapshot.values.get("clientFpsAvg")))
+                    .append(",tps:").append(jsonNumber(snapshot.values.get("serverTps"))).append('}');
         }
         out.append("];")
                 .append("function draw(id,key,maxKey,suffix){const c=document.getElementById(id),x=c.getContext('2d'),w=c.clientWidth,h=c.clientHeight,d=devicePixelRatio||1;c.width=w*d;c.height=h*d;x.scale(d,d);x.strokeStyle='#34445f';x.fillStyle='#93a4bd';x.font='11px system-ui';x.beginPath();x.moveTo(36,10);x.lineTo(36,h-26);x.lineTo(w-8,h-26);x.stroke();const vals=data.map(v=>v[key]).filter(v=>v!==null);if(!vals.length){x.fillText('No data in snapshots',46,40);return}const max=Math.max(1,...data.map(v=>v[maxKey]??v[key]??0));x.strokeStyle='#78a9ff';x.lineWidth=2;x.beginPath();let started=false;data.forEach((v,i)=>{if(v[key]===null){started=false;return}const px=42+(w-54)*(i/Math.max(1,data.length-1)),py=h-28-(h-44)*(v[key]/max);if(!started){x.moveTo(px,py);started=true}else x.lineTo(px,py)});x.stroke();x.fillStyle='#93a4bd';x.fillText('0',12,h-25);x.fillText(Math.round(max)+suffix,4,14)}")
-                .append("draw('heap','heap','heapMax',' МиБ');draw('gc','gc','gc',' мс');draw('mspt','mspt','msptMax',' мс');draw('fps','fps','fps',' FPS');")
+                .append("draw('heap','heap','heapMax',' МиБ');draw('gc','gc','gc',' мс');draw('mspt','mspt','msptMax',' мс');draw('fps','fps','fps',' FPS');draw('tps','tps','tps',' TPS');")
                 .append("function reveal(){const e=document.getElementById(decodeURIComponent(location.hash.slice(1)));if(e){e.closest('details')?.setAttribute('open','');e.scrollIntoView({block:'center'})}}")
                 .append("addEventListener('hashchange',reveal);reveal();</script></main></body></html>");
         return out.toString();
