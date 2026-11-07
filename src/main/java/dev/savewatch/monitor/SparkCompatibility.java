@@ -1,5 +1,7 @@
 package dev.savewatch.monitor;
 
+import net.neoforged.fml.ModList;
+
 /**
  * Optional, dependency-free Spark presence check.
  * Spark's public integration surface differs by platform/version; this class deliberately
@@ -9,6 +11,7 @@ public final class SparkCompatibility {
     private SparkCompatibility() {}
 
     public static boolean isPresent() {
+        if (ModList.get().isLoaded("spark")) return true;
         try {
             Class.forName("me.lucko.spark.common.SparkPlatform", false,
                     SparkCompatibility.class.getClassLoader());
