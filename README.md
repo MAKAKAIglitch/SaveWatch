@@ -64,11 +64,11 @@
 - `/savewatch ai` — regenerate compact AI-ready Markdown summary.
 - `/savewatch links` — show clickable local file links in chat.
 
-Memory analyzer defaults: enabled, chat alerts enabled, 30-second sample interval, 6 post-GC samples, 48 MiB minimum growth, 3% of maximum heap minimum growth, 60% minimum heap occupancy, and a 10-minute alert cooldown. Defaults: 256 MiB log folder cap, Russian messages, 2-second stall threshold, 2-second interval between snapshots, maximum 20 snapshots per continuous stall, 32 stack frames per thread, JFR enabled with a 60-second rolling window, a 64 MiB recording cap, and the four newest exported JFR files.
+Memory analyzer defaults: enabled, chat alerts enabled, 30-second sample interval, 6 post-GC samples, 48 MiB minimum growth, 3% of maximum heap minimum growth, 60% minimum heap occupancy, and a 10-minute alert cooldown. Memory analyzer defaults: enabled, chat alerts enabled, 30-second sample interval, 6 post-GC samples, 48 MiB minimum growth, 3% of maximum heap minimum growth, 60% minimum heap occupancy, and a 10-minute alert cooldown. Defaults: 256 MiB log folder cap, Russian messages, 2-second stall threshold, 2-second interval between snapshots, maximum 20 snapshots per continuous stall, 32 stack frames per thread, JFR enabled with a 60-second rolling window, a 64 MiB recording cap, and the four newest exported JFR files.
 
 ## Configuration
 
-After first launch, edit `config/savewatch.properties`:
+The experimental memory analyzer has an in-game settings screen. Open **Mods → SaveWatch → Configure** in the NeoForge Mods list or Better ModList. Its COMMON config is stored in `config/savewatch-common.toml`. The remaining watchdog settings are in `config/savewatch.properties`:
 
 | Key | Default | Allowed range | Meaning |
 |---|---:|---:|---|
