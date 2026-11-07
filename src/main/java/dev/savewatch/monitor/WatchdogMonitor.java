@@ -105,7 +105,7 @@ public final class WatchdogMonitor {
         watchdog.setPriority(Thread.NORM_PRIORITY - 1);
         watchdog.start();
 
-        LOGGER.info("SaveWatch 0.4.0 started. Server/client stall threshold={}ms, repeat={}ms.",
+        LOGGER.info("SaveWatch 0.5.0 started. Server/client stall threshold={}ms, repeat={}ms.",
                 stallThresholdMs, repeatIntervalMs);
     }
 
@@ -189,11 +189,18 @@ public final class WatchdogMonitor {
                 }))
                 .then(Commands.literal("ai").executes(context -> {
                     try {
-                        Path summary = AiSummaryWriter.generate(Path.of("logs", "savewatch"));
-                        context.getSource().sendSuccess(() -> Component.literal("SaveWatch: AI-сводка создана: " + summary.getFileName()), false);
+                        SNAPSHOT_WRITER.execute(() -> {
+                            try {
+                                Path summary = AiSummaryWriter.generate(Path.of("logs", "savewatch"));
+                                LOGGER.info("AI summary generated: {}", summary.toAbsolutePath());
+                            } catch (IOException exception) {
+                                LOGGER.warn("Could not generate AI summary.", exception);
+                            }
+                        });
+                        context.getSource().sendSuccess(() -> Component.literal("SaveWatch: создание AI-сводки поставлено в очередь."), false);
                         return 1;
-                    } catch (IOException exception) {
-                        context.getSource().sendFailure(Component.literal("SaveWatch: не удалось создать AI-сводку."));
+                    } catch (RejectedExecutionException exception) {
+                        context.getSource().sendFailure(Component.literal("SaveWatch: очередь занята, повтори через несколько секунд."));
                         return 0;
                     }
                 }))
@@ -404,7 +411,7 @@ public final class WatchdogMonitor {
                                       Thread targetThread, long captureStarted, String jfrFile) {
         StringBuilder out = new StringBuilder(32_768);
         out.append("SaveWatch diagnostic report\n")
-                .append("version=0.4.0\n")
+                .append("version=0.5.0\n")
                 .append("reason=").append(reason).append('\n')
                 .append("trigger=").append(trigger).append('\n')
                 .append("timestamp=").append(LocalDateTime.now()).append('\n')
@@ -625,7 +632,7 @@ public final class WatchdogMonitor {
                 properties.setProperty("configVersion", "4");
                 try (var writer = Files.newBufferedWriter(config, StandardCharsets.UTF_8,
                         StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)) {
-                    properties.store(writer, "SaveWatch 0.4.0 settings");
+                    properties.store(writer, "SaveWatch 0.5.0 settings");
                 }
             }
             try (var reader = Files.newBufferedReader(config, StandardCharsets.UTF_8)) {
@@ -674,7 +681,7 @@ public final class WatchdogMonitor {
             if (configChanged) {
                 try (var writer = Files.newBufferedWriter(config, StandardCharsets.UTF_8,
                         StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE)) {
-                    properties.store(writer, "SaveWatch 0.4.0 settings");
+                    properties.store(writer, "SaveWatch 0.5.0 settings");
                 }
             }
 
