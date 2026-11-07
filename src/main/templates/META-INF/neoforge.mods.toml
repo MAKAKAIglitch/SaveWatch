@@ -6,7 +6,7 @@ license="${mod_license}"
 modId="${mod_id}"
 version="${mod_version}"
 displayName="${mod_name}"
-authors="Bzzz-craft contributors"
+authors="SaveWatch contributors"
 description='''A lightweight diagnostic watchdog for long Minecraft server ticks.
 Captures server-thread and JVM thread snapshots while a tick is stalled.
 It does not modify worlds, chunks, entities, or save data.'''
