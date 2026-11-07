@@ -40,3 +40,21 @@ jobs:
           name: SaveWatch-${{ github.sha }}
           path: build/libs/*.jar
           if-no-files-found: error
+
+  validate-windows-builder:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate PowerShell builder syntax
+        shell: powershell
+        run: |
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile("$PWD\scripts\build.ps1", [ref]$tokens, [ref]$errors) | Out-Null
+          if ($errors.Count -gt 0) {
+            $errors | Format-List
+            exit 1
+          }
+          Write-Host "PowerShell builder syntax is valid."
