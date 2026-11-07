@@ -257,7 +257,7 @@ try {
     Write-Info "Starting Gradle Wrapper. Gradle and Minecraft development dependencies will be downloaded when needed."
     Write-Host ""
 
-    & $Wrapper @GradleArgs --no-daemon
+    & $Wrapper @GradleArgs
     $BuildExitCode = $LASTEXITCODE
 
     if ($BuildExitCode -ne 0) {
