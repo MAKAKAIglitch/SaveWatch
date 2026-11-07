@@ -55,7 +55,7 @@ class HtmlReportTests(unittest.TestCase):
             output = Path(directory) / "index.html"
             diagnostic = SAMPLE.replace(
                 "[GC]",
-                "deadlockDetected=true\\ndeadlockedThreadCount=2\\njfrFile=savewatch-test.jfr\\n\\n[GC]",
+                "deadlockDetected=true\ndeadlockedThreadCount=2\njfrFile=savewatch-test.jfr\n\n[GC]",
             )
             source.write_text(diagnostic, encoding="utf-8")
             build([parse(source)], output)
