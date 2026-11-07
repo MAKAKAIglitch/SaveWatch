@@ -1,0 +1,10 @@
+{
+  "config.savewatch.memoryLeakAnalyzer.enabled": "Enable experimental memory leak analyzer",
+  "config.savewatch.memoryLeakAnalyzer.chatAlerts": "Send detection alerts to chat",
+  "config.savewatch.memoryLeakAnalyzer.sampleIntervalSeconds": "Analysis interval (seconds)",
+  "config.savewatch.memoryLeakAnalyzer.minSamples": "Minimum post-GC samples",
+  "config.savewatch.memoryLeakAnalyzer.minGrowthMiB": "Minimum retained heap growth (MiB)",
+  "config.savewatch.memoryLeakAnalyzer.growthPercent": "Minimum growth relative to maximum heap (%)",
+  "config.savewatch.memoryLeakAnalyzer.minHeapPercent": "Minimum heap occupancy for warning (%)",
+  "config.savewatch.memoryLeakAnalyzer.alertCooldownMinutes": "Cooldown between repeated warnings (minutes)"
+}
