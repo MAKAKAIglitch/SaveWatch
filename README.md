@@ -1,6 +1,6 @@
 # SaveWatch
 
-**SaveWatch** is a diagnostic NeoForge mod for Minecraft 1.21.1. It watches both logical-server and client tick progress and captures JVM thread snapshots while a long tick is still in progress.
+**SaveWatch** is a diagnostic NeoForge mod for Minecraft 1.21.1. It watches logical-server ticks, client ticks, and client render frames, then captures JVM thread snapshots while a stall is still in progress.
 
 ## Automatic Windows builder
 
@@ -20,9 +20,9 @@ The builder reuses Gradle's daemon and build cache for faster repeat builds. No 
 
 ## Features in 0.2.0
 
-- Watches server tick progress and client tick progress independently.
+- Watches server ticks, client ticks, and render frames independently.
 - A low-priority daemon watchdog checks progress every 200 ms.
-- Automatically captures a snapshot after a stalled server or client tick crosses the configured threshold.
+- Automatically captures a snapshot after a server tick, client tick, or render frame crosses the configured threshold.
 - Captures repeated snapshots during a continuing stall, making it easier to distinguish a stable deadlock from changing work.
 - Prioritizes the stalled thread, then captures all live JVM threads.
 - Collects thread stacks without the more expensive full monitor/synchronizer enumeration.
@@ -65,7 +65,7 @@ The JAR is written to `build/libs/`.
 
 The mod itself is written in Java because it runs inside the NeoForge JVM. Python is used for offline report analysis:
 
-- `tools/analyze_reports.py` summarizes snapshots, groups repeated server-thread stack frames, and reports tick-duration statistics.
+- `tools/analyze_reports.py` summarizes snapshots, groups repeated frames from the thread that triggered each snapshot, and reports tick-duration statistics.
 - It uses only the Python standard library; Python is not required to install or run the Minecraft mod.
 - On Windows, run `analyze.bat logs\\savewatch`.
 - Run its tests with `py -3 -m unittest discover -s tests -v`.
