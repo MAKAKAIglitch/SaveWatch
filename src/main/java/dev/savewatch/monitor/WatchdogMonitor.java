@@ -217,7 +217,8 @@ public final class WatchdogMonitor {
                 writeSnapshot(reason, tickDurationMs, trigger, targetThread);
             } finally {
                 WRITING.set(false);
-                if (REPORT_REQUESTED.get()) startReportWorker();
+                if ("MANUAL_COMMAND".equals(reason)) queueHtmlReport();
+                else if (REPORT_REQUESTED.get()) startReportWorker();
             }
         }, "SaveWatch Snapshot Writer");
         writer.setDaemon(true);
