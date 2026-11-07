@@ -58,6 +58,7 @@ public final class HtmlReportGenerator {
     private static Snapshot parse(Path path) throws IOException {
         Snapshot snapshot = new Snapshot(path);
         List<String> lines = Files.readAllLines(path, StandardCharsets.UTF_8);
+        snapshot.totalLines = lines.size();
         String section = "";
         ThreadDump current = null;
 
@@ -318,12 +319,9 @@ public final class HtmlReportGenerator {
         final List<String> gc = new ArrayList<>();
         final List<ThreadDump> threads = new ArrayList<>();
         ThreadDump focus;
+        int totalLines;
         Snapshot(Path path) { this.path = path; }
-        int lineCount() {
-            int count = 0;
-            for (ThreadDump thread : threads) count += thread.frames.size() + 1;
-            return count;
-        }
+        int lineCount() { return totalLines; }
     }
 
     private static final class ThreadDump {
