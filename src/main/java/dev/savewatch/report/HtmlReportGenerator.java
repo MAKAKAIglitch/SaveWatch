@@ -270,6 +270,9 @@ public final class HtmlReportGenerator {
             }
         }
 
+        out.append("</tbody></table></section><h2 id=\"dumps\">Дампы потоков</h2>")
+                .append("<p>Раскрой поток, чтобы посмотреть стек. Ссылки ведут к конкретным кадрам.</p>");
+
         for (int reportIndex = 0; reportIndex < snapshots.size(); reportIndex++) {
             Snapshot snapshot = snapshots.get(reportIndex);
             out.append("<section class=\"dump\" id=\"dump-").append(reportIndex).append("\"><h3>")
