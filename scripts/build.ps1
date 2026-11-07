@@ -85,6 +85,8 @@ function Find-Jdk21 {
     }
 
     Add-Candidate $JdkInstallRoot
+    # Prefer the user's existing system-wide Temurin 21 installation when present.
+    Add-Candidate (Join-Path $env:ProgramFiles "Eclipse Adoptium\jdk-21.0.9.10-hotspot")
     Add-Candidate $env:JAVA_HOME
 
     $PathJava = Get-Command java.exe -ErrorAction SilentlyContinue | Select-Object -First 1
