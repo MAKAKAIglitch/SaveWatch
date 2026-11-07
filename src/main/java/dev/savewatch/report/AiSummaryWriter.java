@@ -34,8 +34,18 @@ public final class AiSummaryWriter {
         if (snapshots.isEmpty()) out.append("- Дампов пока нет.\n");
         Map<String, Integer> reasons = new LinkedHashMap<>();
         long maxDuration = 0;
+        Map<String, ModSummary> modCandidates = new LinkedHashMap<>();
         for (Path snapshot : snapshots) {
             Map<String, String> values = readHeader(snapshot);
+            for (ModEvidence evidence : readModEvidence(snapshot)) {
+                if (evidence.triggerFrames <= 0) continue;
+                ModSummary summary = modCandidates.computeIfAbsent(evidence.id,
+                        ignored -> new ModSummary(evidence.id, evidence.displayName, evidence.version));
+                summary.snapshots++;
+                summary.triggerFrames += evidence.triggerFrames;
+                summary.topFrames += evidence.topTriggerFrames;
+                summary.otherFrames += evidence.otherThreadFrames;
+            }
             String reason = values.getOrDefault("reason", "UNKNOWN");
             reasons.merge(reason, 1, Integer::sum);
             long duration = parseLong(values.get("tickDurationMs"));
@@ -61,6 +71,22 @@ public final class AiSummaryWriter {
             }
             out.append("\n");
         }
+        out.append("\n## Моды-кандидаты по стеку зависания\n");
+        if (modCandidates.isEmpty()) {
+            out.append("- В дампах нет сопоставленных классов модов в потоке-триггере. Это не исключает модовую причину.\n");
+        } else {
+            modCandidates.values().stream()
+                    .sorted(Comparator.comparingInt(ModSummary::score).reversed())
+                    .limit(10)
+                    .forEach(candidate -> out.append("- **").append(candidate.displayName)
+                            .append(" (").append(candidate.id).append(")** v").append(candidate.version)
+                            .append(" — ").append(candidate.confidence())
+                            .append("; дампов: ").append(candidate.snapshots)
+                            .append(", кадров потока-триггера: ").append(candidate.triggerFrames)
+                            .append(", верхних кадров: ").append(candidate.topFrames)
+                            .append(", других потоков: ").append(candidate.otherFrames).append("\n"));
+        }
+        out.append("\n> Рейтинг — эвристика по стеку вызовов, а не доказательство виновности. Сверяйте первые кадры и повторяемость с полными дампами/JFR.\n");
         out.append("\n## Последний дамп — ключевые поля\n");
         if (!snapshots.isEmpty()) {
             Map<String, String> latest = readHeader(snapshots.get(0));
@@ -107,6 +133,57 @@ public final class AiSummaryWriter {
             }
         } catch (IOException ignored) {}
         return result;
+    }
+
+    private static List<ModEvidence> readModEvidence(Path path) {
+        List<ModEvidence> result = new ArrayList<>();
+        boolean inSection = false;
+        try (var reader = Files.newBufferedReader(path, StandardCharsets.UTF_8)) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                if (line.startsWith("[") && line.endsWith("]")) {
+                    inSection = line.equals("[MOD_ATTRIBUTION]");
+                    continue;
+                }
+                if (!inSection || line.isBlank()) continue;
+                String[] fields = line.split("\\t", -1);
+                if (fields.length < 8) continue;
+                result.add(new ModEvidence(fields[0], fields[1], fields[2],
+                        parseInt(fields[3]), parseInt(fields[4]), parseInt(fields[5])));
+            }
+        } catch (IOException ignored) {}
+        return result;
+    }
+
+    private static int parseInt(String value) {
+        try { return Integer.parseInt(value); } catch (RuntimeException ignored) { return 0; }
+    }
+
+    private record ModEvidence(String id, String displayName, String version,
+                               int triggerFrames, int otherThreadFrames, int topTriggerFrames) {}
+
+    private static final class ModSummary {
+        final String id;
+        final String displayName;
+        final String version;
+        int snapshots;
+        int triggerFrames;
+        int topFrames;
+        int otherFrames;
+
+        ModSummary(String id, String displayName, String version) {
+            this.id = id;
+            this.displayName = displayName;
+            this.version = version;
+        }
+
+        int score() { return snapshots * 10 + topFrames * 3 + triggerFrames * 2 + Math.min(otherFrames, 20); }
+
+        String confidence() {
+            if (snapshots >= 2 && topFrames >= 2) return "сильный сигнал";
+            if (snapshots >= 2 || triggerFrames >= 3 || topFrames > 0) return "возможная связь";
+            return "слабый сигнал";
+        }
     }
 
     private static Map<String, String> readHeader(Path path) {
