@@ -1,0 +1,10 @@
+{
+  "config.savewatch.memoryLeakAnalyzer.enabled": "Включить экспериментальный анализатор утечек памяти",
+  "config.savewatch.memoryLeakAnalyzer.chatAlerts": "Уведомления об обнаружении в чате",
+  "config.savewatch.memoryLeakAnalyzer.sampleIntervalSeconds": "Интервал анализа (сек.)",
+  "config.savewatch.memoryLeakAnalyzer.minSamples": "Минимум образцов после GC",
+  "config.savewatch.memoryLeakAnalyzer.minGrowthMiB": "Минимальный рост занятой памяти (МиБ)",
+  "config.savewatch.memoryLeakAnalyzer.growthPercent": "Минимальный рост от максимального heap (%)",
+  "config.savewatch.memoryLeakAnalyzer.minHeapPercent": "Минимальная заполненность heap для предупреждения (%)",
+  "config.savewatch.memoryLeakAnalyzer.alertCooldownMinutes": "Задержка между повторными предупреждениями (мин.)"
+}
