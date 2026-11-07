@@ -117,6 +117,7 @@ public final class WatchdogMonitor {
         String memoryLeakWarning = MemoryLeakAnalyzer.tick(event.getServer());
         if (memoryLeakWarning != null) {
             queueSnapshot("MEMORY_LEAK_SUSPECTED", 0, "server", serverThread);
+            SERVER_DUMPS_THIS_STALL.incrementAndGet();
         }
         long started = SERVER_TICK_STARTED_NANOS.getAndSet(0);
         if (started != 0) {
