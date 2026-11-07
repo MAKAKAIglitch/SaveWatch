@@ -165,14 +165,30 @@ def _cards(reports, snapshots):
     longest = max(durations) if durations else None
     heap = [s["heap"] for s in snapshots if s["heap"] is not None]
     latest = reports[-1]["values"] if reports else {}
+    threshold = _number(latest.get("thresholdMs")) or 2000
+    heap_ratio = None
+    if reports:
+        used = _number(latest.get("heapUsedMiB"))
+        maximum = _number(latest.get("heapMaxMiB"))
+        if used is not None and maximum and maximum > 0:
+            heap_ratio = used / maximum
+    if longest is not None and longest >= threshold * 5:
+        status = "Critical · long stall captured"
+    elif (longest is not None and longest >= threshold) or (heap_ratio is not None and heap_ratio >= .90):
+        status = "Attention · threshold exceeded"
+    elif any(r["values"].get("reason", "").startswith("LONG_") for r in reports):
+        status = "Attention · long event recorded"
+    else:
+        status = "No long stall in these snapshots"
     return (
-        f'<div class="cards"><article><small>Snapshots</small><strong>{count}</strong></article>'
-        f'<article><small>Longest captured tick/frame</small><strong>{longest:g} ms</strong></article>' if longest is not None else
-        f'<div class="cards"><article><small>Snapshots</small><strong>{count}</strong></article><article><small>Longest captured tick/frame</small><strong>—</strong></article>'
-    ) + (
-        f'<article><small>Latest heap used</small><strong>{heap[-1]:g} MiB</strong></article>' if heap else
-        '<article><small>Latest heap used</small><strong>—</strong></article>'
-    ) + f'<article><small>Latest trigger</small><strong>{html.escape(latest.get("reason","—"))}</strong></article></div>'
+        f'<div class="cards"><article><small>Overall assessment</small><strong>{html.escape(status)}</strong></article>'
+        f'<article><small>Snapshots</small><strong>{count}</strong></article>'
+        + (f'<article><small>Longest captured tick/frame</small><strong>{longest:g} ms</strong></article>' if longest is not None else
+           '<article><small>Longest captured tick/frame</small><strong>—</strong></article>')
+        + (f'<article><small>Latest heap used</small><strong>{heap[-1]:g} MiB</strong></article>' if heap else
+           '<article><small>Latest heap used</small><strong>—</strong></article>')
+        + f'<article><small>Latest trigger</small><strong>{html.escape(latest.get("reason","—"))}</strong></article></div>'
+    )
 
 PAGE = r"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
