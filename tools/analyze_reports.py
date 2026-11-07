@@ -127,9 +127,17 @@ def render_summary(reports: list[Report], top: int) -> str:
         states[focus.state] += 1
         frame_counts.update(focus.frames)
 
+    deadlock_reports = sum(
+        report.values.get("deadlockDetected", "").lower() == "true" for report in reports
+    )
+    jfr_exports = sum(
+        report.values.get("jfrFile", "").lower().endswith(".jfr") for report in reports
+    )
     lines += [
         f"- Time range: **{reports[0].values.get('timestamp', 'unknown')}** to **{reports[-1].values.get('timestamp', 'unknown')}**",
         f"- Reports without a matching trigger-thread section: **{missing_focus}**",
+        f"- Snapshots with detected JVM deadlocks: **{deadlock_reports}**",
+        f"- Snapshots with a JFR export: **{jfr_exports}**",
     ]
 
     if durations:
