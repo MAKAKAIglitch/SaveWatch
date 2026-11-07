@@ -29,10 +29,20 @@ try {
         throw "Git for Windows is not installed or git.exe is not available in PATH. Install Git, then run this updater again."
     }
 
-    $GitRoot = (& git -C $ProjectRoot rev-parse --show-toplevel 2>$null)
-    if ($LASTEXITCODE -ne 0 -or !$GitRoot) {
-        throw "This folder is not a Git clone. Clone https://github.com/$Repository.git first; the updater intentionally does not overwrite ZIP-extracted folders."
+    # A ZIP download has no .git metadata, so Git cannot fetch or fast-forward it.
+    # Check this before invoking Git: Windows PowerShell 5.1 can turn native stderr
+    # into a terminating error when ErrorActionPreference is Stop.
+    $GitMetadata = Join-Path $ProjectRoot ".git"
+    if (!(Test-Path -LiteralPath $GitMetadata)) {
+        throw "This SaveWatch folder is not a Git clone (the .git directory/file is missing). The source updater uses Git and cannot update a ZIP-extracted copy. Clone the repository with: git clone --branch main https://github.com/$Repository.git SaveWatch. Then run update-sources.bat from the cloned SaveWatch folder. Your current files have not been changed."
     }
+
+    $GitRootOutput = @(& git -C $ProjectRoot rev-parse --show-toplevel 2>&1)
+    $GitRootExitCode = $LASTEXITCODE
+    if ($GitRootExitCode -ne 0 -or !$GitRootOutput) {
+        throw "Git metadata exists, but this folder is not a valid Git working tree. Check the .git entry and repository integrity. Git said: $($GitRootOutput -join ' ')"
+    }
+    $GitRoot = $GitRootOutput | Select-Object -Last 1
 
     $GitRoot = [IO.Path]::GetFullPath(($GitRoot | Select-Object -First 1).Trim())
     $ExpectedRoot = [IO.Path]::GetFullPath($ProjectRoot)
