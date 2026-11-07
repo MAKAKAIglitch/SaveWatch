@@ -319,6 +319,7 @@ public final class WatchdogMonitor {
                     .append(" totalMs=").append(gc.getCollectionTime()).append('\n');
         }
 
+        out.append("\\n[DIAGNOSTICS]\\n");
         ThreadMXBean threadBean = ManagementFactory.getThreadMXBean();
         long[] deadlockedIds = null;
         try {
