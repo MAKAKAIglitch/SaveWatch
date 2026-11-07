@@ -4,6 +4,17 @@
 
 > **Current scope:** SaveWatch observes server tick stalls. Version 0.1.0 does not identify the exact cause of a stall, does not instrument BetterAutoSave internals, and does not change Minecraft's save implementation.
 
+## Automatic Windows builder
+
+The repository includes a one-click Windows build helper:
+
+1. Run `build.bat`.
+2. It finds a valid JDK 21 or downloads Eclipse Temurin 21 locally and verifies its SHA-256 checksum.
+3. The Gradle Wrapper downloads the pinned Gradle distribution and required build dependencies.
+4. The compiled mod appears in `build/libs/`.
+
+No administrator rights or system-wide Java configuration changes are required. See [BUILDING.md](BUILDING.md) for details and optional tasks.
+
 ## Compatibility
 
 - Minecraft: 1.21.1
