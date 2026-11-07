@@ -1,6 +1,7 @@
 package dev.savewatch.monitor;
 
 import com.mojang.brigadier.CommandDispatcher;
+import dev.savewatch.report.HtmlReportGenerator;
 import java.io.IOException;
 import java.lang.management.GarbageCollectorMXBean;
 import java.lang.management.ManagementFactory;
@@ -49,6 +50,8 @@ public final class WatchdogMonitor {
 
     private static final AtomicBoolean STARTED = new AtomicBoolean();
     private static final AtomicBoolean WRITING = new AtomicBoolean();
+    private static final AtomicBoolean REPORT_REQUESTED = new AtomicBoolean();
+    private static final AtomicBoolean REPORT_WRITING = new AtomicBoolean();
 
     private static volatile Thread serverThread;
     private static volatile Thread clientThread;
@@ -83,7 +86,7 @@ public final class WatchdogMonitor {
         long started = SERVER_TICK_STARTED_NANOS.getAndSet(0);
         if (started != 0) LAST_SERVER_TICK_NANOS.set(System.nanoTime() - started);
         LAST_SERVER_DUMP_NANOS.set(0);
-        SERVER_DUMPS_THIS_STALL.set(0);
+        if (SERVER_DUMPS_THIS_STALL.getAndSet(0) > 0) queueHtmlReport();
     }
 
     /** Called by the client-only event subscriber. */
@@ -97,7 +100,7 @@ public final class WatchdogMonitor {
         long started = CLIENT_TICK_STARTED_NANOS.getAndSet(0);
         if (started != 0) LAST_CLIENT_TICK_NANOS.set(System.nanoTime() - started);
         LAST_CLIENT_DUMP_NANOS.set(0);
-        CLIENT_DUMPS_THIS_STALL.set(0);
+        if (CLIENT_DUMPS_THIS_STALL.getAndSet(0) > 0) queueHtmlReport();
     }
 
     /** Called at the start/end of a GameRenderer frame on the physical client. */
@@ -110,7 +113,7 @@ public final class WatchdogMonitor {
         long started = RENDER_FRAME_STARTED_NANOS.getAndSet(0);
         if (started != 0) LAST_RENDER_FRAME_NANOS.set(System.nanoTime() - started);
         LAST_RENDER_DUMP_NANOS.set(0);
-        RENDER_DUMPS_THIS_STALL.set(0);
+        if (RENDER_DUMPS_THIS_STALL.getAndSet(0) > 0) queueHtmlReport();
     }
 
     public static void onRegisterCommands(RegisterCommandsEvent event) {
@@ -126,6 +129,13 @@ public final class WatchdogMonitor {
                             serverThread != null ? serverThread : (clientThread != null ? clientThread : renderThread));
                     context.getSource().sendSuccess(
                             () -> Component.literal("SaveWatch: diagnostic snapshot queued. Check logs/savewatch/."),
+                            false);
+                    return 1;
+                }))
+                .then(Commands.literal("report").executes(context -> {
+                    queueHtmlReport();
+                    context.getSource().sendSuccess(
+                            () -> Component.literal("SaveWatch: HTML report queued. It will be saved to logs/savewatch/index.html."),
                             false);
                     return 1;
                 })));
@@ -207,6 +217,7 @@ public final class WatchdogMonitor {
                 writeSnapshot(reason, tickDurationMs, trigger, targetThread);
             } finally {
                 WRITING.set(false);
+                if (REPORT_REQUESTED.get()) startReportWorker();
             }
         }, "SaveWatch Snapshot Writer");
         writer.setDaemon(true);
@@ -241,7 +252,7 @@ public final class WatchdogMonitor {
                                       Thread targetThread, long captureStarted) {
         StringBuilder out = new StringBuilder(32_768);
         out.append("SaveWatch diagnostic report\n")
-                .append("version=0.2.0\n")
+                .append("version=0.3.0\n")
                 .append("reason=").append(reason).append('\n')
                 .append("trigger=").append(trigger).append('\n')
                 .append("timestamp=").append(LocalDateTime.now()).append('\n')
@@ -315,6 +326,39 @@ public final class WatchdogMonitor {
                 .append("collectionDurationMs=").append((System.nanoTime() - captureStarted) / 1_000_000L).append('\n')
                 .append("\n[END]\n");
         return out.toString();
+    }
+
+    /** Queues an offline HTML report without doing filesystem work on a game thread. */
+    private static void queueHtmlReport() {
+        REPORT_REQUESTED.set(true);
+        startReportWorker();
+    }
+
+    private static void startReportWorker() {
+        if (WRITING.get() || !REPORT_WRITING.compareAndSet(false, true)) return;
+        Thread worker = new Thread(() -> {
+            try {
+                while (REPORT_REQUESTED.getAndSet(false)) {
+                    try {
+                        Path output = HtmlReportGenerator.generate(Path.of("logs", "savewatch"));
+                        LOGGER.info("HTML diagnostic report generated: {}", output.toString().replace('\\', '/'));
+                    } catch (IOException | RuntimeException exception) {
+                        LOGGER.warn("Could not generate SaveWatch HTML report.", exception);
+                    }
+                }
+            } finally {
+                REPORT_WRITING.set(false);
+                if (REPORT_REQUESTED.get() && !WRITING.get()) startReportWorker();
+            }
+        }, "SaveWatch HTML Report Writer");
+        worker.setDaemon(true);
+        worker.setPriority(Thread.NORM_PRIORITY - 1);
+        try {
+            worker.start();
+        } catch (RuntimeException exception) {
+            REPORT_WRITING.set(false);
+            LOGGER.error("Could not start SaveWatch HTML report worker.", exception);
+        }
     }
 
     private static String threadName(Thread thread) {
