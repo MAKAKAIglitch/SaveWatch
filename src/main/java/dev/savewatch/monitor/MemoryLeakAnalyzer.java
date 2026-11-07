@@ -72,7 +72,8 @@ public final class MemoryLeakAnalyzer {
         long minimumGrowth = SaveWatchConfig.MEMORY_LEAK_MIN_GROWTH_MIB.get() * 1024L * 1024L;
         long percentageGrowth = (long) (maxHeap * (SaveWatchConfig.MEMORY_LEAK_GROWTH_PERCENT.get() / 100.0));
         long requiredGrowth = Math.max(minimumGrowth, percentageGrowth);
-        double heapPercent = maxHeap <= 0 ? 0.0 : latest.usedBytes * 100.0 / maxHeap;
+        long totalHeapUsed = ManagementFactory.getMemoryMXBean().getHeapMemoryUsage().getUsed();
+        double heapPercent = maxHeap <= 0 ? 0.0 : totalHeapUsed * 100.0 / maxHeap;
         double minimumHeapPercent = SaveWatchConfig.MEMORY_LEAK_MIN_HEAP_PERCENT.get();
 
         if (growthBytes < requiredGrowth || heapPercent < minimumHeapPercent) return null;
