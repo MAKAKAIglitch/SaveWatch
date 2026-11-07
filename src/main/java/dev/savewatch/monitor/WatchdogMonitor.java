@@ -2,6 +2,8 @@ package dev.savewatch.monitor;
 
 import com.mojang.brigadier.CommandDispatcher;
 import dev.savewatch.report.HtmlReportGenerator;
+import dev.savewatch.report.AiSummaryWriter;
+import dev.savewatch.util.LogRetention;
 import java.io.IOException;
 import java.lang.management.GarbageCollectorMXBean;
 import java.lang.management.ManagementFactory;
@@ -86,6 +88,8 @@ public final class WatchdogMonitor {
     private static volatile long jfrMaxAgeSeconds = 60;
     private static volatile long jfrMaxSizeMiB = 64;
     private static volatile int jfrMaxExports = 4;
+    private static volatile long maxLogSizeMiB = 256;
+    private static volatile String language = "ru";
 
     private WatchdogMonitor() {}
 
@@ -171,6 +175,16 @@ public final class WatchdogMonitor {
                     context.getSource().sendFailure(Component.literal(
                             "SaveWatch: snapshot queue is full; try again in a moment."));
                     return 0;
+                }))
+                .then(Commands.literal("ai").executes(context -> {
+                    try {
+                        Path summary = AiSummaryWriter.generate(Path.of("logs", "savewatch"));
+                        context.getSource().sendSuccess(() -> Component.literal("SaveWatch: AI-сводка создана: " + summary.getFileName()), false);
+                        return 1;
+                    } catch (IOException exception) {
+                        context.getSource().sendFailure(Component.literal("SaveWatch: не удалось создать AI-сводку."));
+                        return 0;
+                    }
                 }))
                 .then(Commands.literal("report").executes(context -> {
                     queueHtmlReport();
@@ -334,7 +348,9 @@ public final class WatchdogMonitor {
             Path output = directory.resolve(filename);
             Files.writeString(output, report, StandardCharsets.UTF_8,
                     StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
-            LOGGER.warn("Diagnostic snapshot written: {} (reason={}, tick={}ms)",
+            LogRetention.enforce(directory, maxLogSizeMiB);
+            AiSummaryWriter.generate(directory);
+            LOGGER.warn("Diagnostic snapshot written: {} (reason={}, tick={}ms)", 
                     output.toString().replace('\\', '/'), reason, tickDurationMs);
         } catch (IOException | RuntimeException exception) {
             LOGGER.error("Could not write diagnostic snapshot.", exception);
@@ -360,7 +376,8 @@ public final class WatchdogMonitor {
                 .append("triggerThread=").append(threadName(targetThread)).append('\n')
                 .append("triggerThreadId=").append(targetThread == null ? -1 : targetThread.getId()).append('\n')
                 .append("thresholdMs=").append(stallThresholdMs).append('\n')
-                .append("jfrFile=").append(jfrFile).append('\n');
+                .append("jfrFile=").append(jfrFile).append('\n')
+                .append("sparkDetected=").append(SparkCompatibility.isPresent()).append('\n');
 
         Runtime runtime = Runtime.getRuntime();
         out.append("\n[JVM]\n")
@@ -489,7 +506,10 @@ public final class WatchdogMonitor {
             try {
                 while (REPORT_REQUESTED.getAndSet(false)) {
                     try {
-                        Path output = HtmlReportGenerator.generate(Path.of("logs", "savewatch"));
+                        Path directory = Path.of("logs", "savewatch");
+                        LogRetention.enforce(directory, maxLogSizeMiB);
+                        Path output = HtmlReportGenerator.generate(directory);
+                        AiSummaryWriter.generate(directory);
                         LOGGER.info("HTML diagnostic report generated: {}", output.toString().replace('\\', '/'));
                     } catch (IOException | RuntimeException exception) {
                         LOGGER.warn("Could not generate SaveWatch HTML report.", exception);
@@ -529,7 +549,9 @@ public final class WatchdogMonitor {
                 properties.setProperty("jfrMaxAgeSeconds", "60");
                 properties.setProperty("jfrMaxSizeMiB", "64");
                 properties.setProperty("jfrMaxExports", "4");
-                properties.setProperty("configVersion", "3");
+                properties.setProperty("maxLogSizeMiB", "256");
+                properties.setProperty("language", "ru");
+                properties.setProperty("configVersion", "4");
                 try (var writer = Files.newBufferedWriter(config, StandardCharsets.UTF_8,
                         StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)) {
                     properties.store(writer, "SaveWatch 0.4.0 settings");
@@ -566,8 +588,16 @@ public final class WatchdogMonitor {
                 properties.setProperty("jfrMaxExports", "4");
                 configChanged = true;
             }
-            if (!"3".equals(properties.getProperty("configVersion"))) {
-                properties.setProperty("configVersion", "3");
+            if (!properties.containsKey("maxLogSizeMiB")) {
+                properties.setProperty("maxLogSizeMiB", "256");
+                configChanged = true;
+            }
+            if (!properties.containsKey("language")) {
+                properties.setProperty("language", "ru");
+                configChanged = true;
+            }
+            if (!"4".equals(properties.getProperty("configVersion"))) {
+                properties.setProperty("configVersion", "4");
                 configChanged = true;
             }
             if (configChanged) {
@@ -585,6 +615,9 @@ public final class WatchdogMonitor {
             jfrMaxAgeSeconds = boundedLong(properties, "jfrMaxAgeSeconds", 60, 10, 600);
             jfrMaxSizeMiB = boundedLong(properties, "jfrMaxSizeMiB", 64, 16, 512);
             jfrMaxExports = (int) boundedLong(properties, "jfrMaxExports", 4, 1, 20);
+            maxLogSizeMiB = boundedLong(properties, "maxLogSizeMiB", 256, 32, 4096);
+            language = properties.getProperty("language", "ru").trim().toLowerCase(Locale.ROOT);
+            if (!language.equals("ru") && !language.equals("en")) language = "ru";
         } catch (IOException | RuntimeException exception) {
             LOGGER.warn("Could not load config/savewatch.properties; using safe defaults.", exception);
         }
