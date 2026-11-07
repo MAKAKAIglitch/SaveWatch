@@ -137,8 +137,13 @@ public final class HtmlReportGenerator {
                 ? 2000 : number(latest.values.get("thresholdMs")));
         double heapUsed = value(latest, "heapUsedMiB", -1);
         double heapMax = value(latest, "heapMaxMiB", -1);
+        boolean deadlockDetected = snapshots.stream()
+                .anyMatch(snapshot -> Boolean.parseBoolean(snapshot.values.getOrDefault("deadlockDetected", "false")));
+        long deadlockedThreads = snapshots.stream()
+                .mapToLong(snapshot -> (long) value(snapshot, "deadlockedThreadCount", 0)).max().orElse(0);
         String assessment;
-        if (longest >= threshold * 5.0) assessment = "Critical — very long stall captured";
+        if (deadlockDetected) assessment = "Critical — JVM deadlock detected";
+        else if (longest >= threshold * 5.0) assessment = "Critical — very long stall captured";
         else if (longest >= threshold || (heapMax > 0 && heapUsed / heapMax >= .90))
             assessment = "Attention — threshold exceeded";
         else if (snapshots.stream().anyMatch(s -> s.values.getOrDefault("reason", "").startsWith("LONG_")))
@@ -157,6 +162,8 @@ public final class HtmlReportGenerator {
                 .append(card("Longest tick / frame", longest < 0 ? "—" : format(longest) + " ms"))
                 .append(card("Latest heap used", heapUsed < 0 ? "—" : format(heapUsed) + " MiB"))
                 .append(card("Latest trigger", latest.values.getOrDefault("reason", "—")))
+                .append(card("Deadlocked threads", Long.toString(deadlockedThreads)))
+                .append(card("JFR capture", latest.values.getOrDefault("jfrFile", "unavailable")))
                 .append("</section>")
                 .append("<h2>Memory and GC</h2><div class=\"grid\">")
                 .append("<section class=\"panel\"><h3>Heap usage</h3><canvas id=\"heap\" class=\"chart\"></canvas><p>Heap used / maximum, MiB.</p></section>")
@@ -226,6 +233,9 @@ public final class HtmlReportGenerator {
             appendMeta(out, snapshot, "heapCommittedMiB");
             appendMeta(out, snapshot, "heapMaxMiB");
             appendMeta(out, snapshot, "nonHeapUsedMiB");
+            appendMeta(out, snapshot, "deadlockDetected");
+            appendMeta(out, snapshot, "deadlockedThreadCount");
+            appendMeta(out, snapshot, "jfrFile");
             out.append("</div>");
             for (ThreadDump thread : snapshot.threads) {
                 String threadId = "dump-" + reportIndex + "-thread-" + thread.id;
