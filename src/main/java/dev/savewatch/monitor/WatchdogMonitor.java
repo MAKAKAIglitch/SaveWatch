@@ -25,25 +25,33 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Observes the logical server thread from a separate daemon thread.
- * Snapshots are taken while a long tick is still running.
+ * Watches server and client tick progress from a separate daemon thread.
+ * Thread snapshots are captured while a stall is still happening.
  */
 public final class WatchdogMonitor {
     private static final Logger LOGGER = LoggerFactory.getLogger("SaveWatch");
     private static final DateTimeFormatter FILE_TIME = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss-SSS");
-    private static final AtomicLong TICK_STARTED_NANOS = new AtomicLong();
-    private static final AtomicLong LAST_TICK_NANOS = new AtomicLong();
+
+    private static final AtomicLong SERVER_TICK_STARTED_NANOS = new AtomicLong();
+    private static final AtomicLong CLIENT_TICK_STARTED_NANOS = new AtomicLong();
+    private static final AtomicLong LAST_SERVER_TICK_NANOS = new AtomicLong();
+    private static final AtomicLong LAST_CLIENT_TICK_NANOS = new AtomicLong();
     private static final AtomicLong TICK_COUNT = new AtomicLong();
-    private static final AtomicLong LAST_DUMP_NANOS = new AtomicLong();
-    private static final AtomicLong DUMPS_THIS_STALL = new AtomicLong();
+
+    private static final AtomicLong LAST_SERVER_DUMP_NANOS = new AtomicLong();
+    private static final AtomicLong LAST_CLIENT_DUMP_NANOS = new AtomicLong();
+    private static final AtomicLong SERVER_DUMPS_THIS_STALL = new AtomicLong();
+    private static final AtomicLong CLIENT_DUMPS_THIS_STALL = new AtomicLong();
+
     private static final AtomicBoolean STARTED = new AtomicBoolean();
     private static final AtomicBoolean WRITING = new AtomicBoolean();
 
     private static volatile Thread serverThread;
+    private static volatile Thread clientThread;
     private static volatile long stallThresholdMs = 2_000;
-    private static volatile long repeatIntervalMs = 5_000;
-    private static volatile int maxDumpsPerStall = 20;
-    private static volatile int stackDepth = 48;
+    private static volatile long repeatIntervalMs = 2_000;
+    private static volatile int maxDumpsPerStall = 8;
+    private static volatile int stackDepth = 32;
 
     private WatchdogMonitor() {}
 
@@ -56,21 +64,35 @@ public final class WatchdogMonitor {
         watchdog.setPriority(Thread.NORM_PRIORITY - 1);
         watchdog.start();
 
-        LOGGER.info("SaveWatch 0.1.0 started. Long-tick threshold={}ms, repeat={}ms.",
+        LOGGER.info("SaveWatch 0.2.0 started. Server/client stall threshold={}ms, repeat={}ms.",
                 stallThresholdMs, repeatIntervalMs);
     }
 
     public static void onServerTickPre(ServerTickEvent.Pre event) {
         serverThread = Thread.currentThread();
         TICK_COUNT.incrementAndGet();
-        TICK_STARTED_NANOS.set(System.nanoTime());
+        SERVER_TICK_STARTED_NANOS.set(System.nanoTime());
     }
 
     public static void onServerTickPost(ServerTickEvent.Post event) {
-        long started = TICK_STARTED_NANOS.getAndSet(0);
-        if (started != 0) LAST_TICK_NANOS.set(System.nanoTime() - started);
-        LAST_DUMP_NANOS.set(0);
-        DUMPS_THIS_STALL.set(0);
+        long started = SERVER_TICK_STARTED_NANOS.getAndSet(0);
+        if (started != 0) LAST_SERVER_TICK_NANOS.set(System.nanoTime() - started);
+        LAST_SERVER_DUMP_NANOS.set(0);
+        SERVER_DUMPS_THIS_STALL.set(0);
+    }
+
+    /** Called by the client-only event subscriber. */
+    public static void onClientTickPre() {
+        clientThread = Thread.currentThread();
+        CLIENT_TICK_STARTED_NANOS.set(System.nanoTime());
+    }
+
+    /** Called by the client-only event subscriber. */
+    public static void onClientTickPost() {
+        long started = CLIENT_TICK_STARTED_NANOS.getAndSet(0);
+        if (started != 0) LAST_CLIENT_TICK_NANOS.set(System.nanoTime() - started);
+        LAST_CLIENT_DUMP_NANOS.set(0);
+        CLIENT_DUMPS_THIS_STALL.set(0);
     }
 
     public static void onRegisterCommands(RegisterCommandsEvent event) {
@@ -82,7 +104,7 @@ public final class WatchdogMonitor {
                     return 1;
                 }))
                 .then(Commands.literal("dump").executes(context -> {
-                    requestManualDump();
+                    queueSnapshot("MANUAL_COMMAND", currentTickDurationMs(), "command", null);
                     context.getSource().sendSuccess(
                             () -> Component.literal("SaveWatch: diagnostic snapshot queued. Check logs/savewatch/."),
                             false);
@@ -99,52 +121,73 @@ public final class WatchdogMonitor {
                 return;
             }
 
-            long started = TICK_STARTED_NANOS.get();
-            if (started == 0) continue;
-
-            long elapsedMs = (System.nanoTime() - started) / 1_000_000L;
-            if (elapsedMs < stallThresholdMs) continue;
-
-            long now = System.nanoTime();
-            long previousDump = LAST_DUMP_NANOS.get();
-            if (previousDump != 0 && now - previousDump < repeatIntervalMs * 1_000_000L) continue;
-            if (DUMPS_THIS_STALL.get() >= maxDumpsPerStall) continue;
-            if (!LAST_DUMP_NANOS.compareAndSet(previousDump, now)) continue;
-
-            DUMPS_THIS_STALL.incrementAndGet();
-            writeSnapshot("LONG_SERVER_TICK", elapsedMs);
+            checkStall("LONG_SERVER_TICK", SERVER_TICK_STARTED_NANOS.get(),
+                    LAST_SERVER_DUMP_NANOS, SERVER_DUMPS_THIS_STALL, serverThread);
+            checkStall("LONG_CLIENT_TICK", CLIENT_TICK_STARTED_NANOS.get(),
+                    LAST_CLIENT_DUMP_NANOS, CLIENT_DUMPS_THIS_STALL, clientThread);
         }
     }
 
-    private static void requestManualDump() {
-        Thread writer = new Thread(
-                () -> writeSnapshot("MANUAL_COMMAND", currentTickDurationMs()),
-                "SaveWatch Manual Snapshot");
-        writer.setDaemon(true);
-        writer.start();
+    private static void checkStall(String reason, long started, AtomicLong lastDump,
+                                   AtomicLong dumpCount, Thread targetThread) {
+        if (started == 0) return;
+
+        long now = System.nanoTime();
+        long elapsedMs = (now - started) / 1_000_000L;
+        if (elapsedMs < stallThresholdMs || dumpCount.get() >= maxDumpsPerStall) return;
+
+        long previousDump = lastDump.get();
+        if (previousDump != 0 && now - previousDump < repeatIntervalMs * 1_000_000L) return;
+        if (WRITING.get()) return;
+        if (!lastDump.compareAndSet(previousDump, now)) return;
+
+        dumpCount.incrementAndGet();
+        queueSnapshot(reason, elapsedMs, reason.equals("LONG_CLIENT_TICK") ? "client" : "server", targetThread);
     }
 
     private static long currentTickDurationMs() {
-        long started = TICK_STARTED_NANOS.get();
-        return started == 0 ? LAST_TICK_NANOS.get() / 1_000_000L
-                : (System.nanoTime() - started) / 1_000_000L;
+        long serverStarted = SERVER_TICK_STARTED_NANOS.get();
+        if (serverStarted != 0) return (System.nanoTime() - serverStarted) / 1_000_000L;
+        long clientStarted = CLIENT_TICK_STARTED_NANOS.get();
+        if (clientStarted != 0) return (System.nanoTime() - clientStarted) / 1_000_000L;
+        return Math.max(LAST_SERVER_TICK_NANOS.get(), LAST_CLIENT_TICK_NANOS.get()) / 1_000_000L;
     }
 
     private static String statusText() {
         Runtime runtime = Runtime.getRuntime();
         long used = runtime.totalMemory() - runtime.freeMemory();
-        boolean inTick = TICK_STARTED_NANOS.get() != 0;
-        return "SaveWatch 0.1.0 | observed ticks=" + TICK_COUNT.get()
-                + " | last tick=" + LAST_TICK_NANOS.get() / 1_000_000L + "ms"
-                + (inTick ? " | current tick=" + currentTickDurationMs() + "ms" : "")
+        boolean inServerTick = SERVER_TICK_STARTED_NANOS.get() != 0;
+        boolean inClientTick = CLIENT_TICK_STARTED_NANOS.get() != 0;
+        return "SaveWatch 0.2.0 | observed server ticks=" + TICK_COUNT.get()
+                + " | last server tick=" + LAST_SERVER_TICK_NANOS.get() / 1_000_000L + "ms"
+                + " | last client tick=" + LAST_CLIENT_TICK_NANOS.get() / 1_000_000L + "ms"
+                + (inServerTick ? " | current server tick=" + currentTickDurationMs() + "ms" : "")
+                + (inClientTick ? " | client tick active" : "")
                 + " | heap used=" + formatMiB(used) + " MiB"
                 + " | heap max=" + formatMiB(runtime.maxMemory()) + " MiB";
     }
 
-    private static void writeSnapshot(String reason, long tickDurationMs) {
+    private static void queueSnapshot(String reason, long tickDurationMs, String trigger,
+                                      Thread targetThread) {
         if (!WRITING.compareAndSet(false, true)) return;
+
+        Thread writer = new Thread(() -> {
+            try {
+                writeSnapshot(reason, tickDurationMs, trigger, targetThread);
+            } finally {
+                WRITING.set(false);
+            }
+        }, "SaveWatch Snapshot Writer");
+        writer.setDaemon(true);
+        writer.setPriority(Thread.NORM_PRIORITY - 1);
+        writer.start();
+    }
+
+    private static void writeSnapshot(String reason, long tickDurationMs, String trigger,
+                                      Thread targetThread) {
         try {
-            String report = buildReport(reason, tickDurationMs);
+            long captureStarted = System.nanoTime();
+            String report = buildReport(reason, tickDurationMs, trigger, targetThread, captureStarted);
             Path directory = Path.of("logs", "savewatch");
             Files.createDirectories(directory);
             String filename = "savewatch-" + FILE_TIME.format(LocalDateTime.now()) + ".txt";
@@ -155,21 +198,25 @@ public final class WatchdogMonitor {
                     output.toString().replace('\\', '/'), reason, tickDurationMs);
         } catch (IOException | RuntimeException exception) {
             LOGGER.error("Could not write diagnostic snapshot.", exception);
-        } finally {
-            WRITING.set(false);
         }
     }
 
-    private static String buildReport(String reason, long tickDurationMs) {
-        StringBuilder out = new StringBuilder(16_384);
+    private static String buildReport(String reason, long tickDurationMs, String trigger,
+                                      Thread targetThread, long captureStarted) {
+        StringBuilder out = new StringBuilder(32_768);
         out.append("SaveWatch diagnostic report\n")
-                .append("version=0.1.0\n")
+                .append("version=0.2.0\n")
                 .append("reason=").append(reason).append('\n')
+                .append("trigger=").append(trigger).append('\n')
                 .append("timestamp=").append(LocalDateTime.now()).append('\n')
                 .append("tickDurationMs=").append(tickDurationMs).append('\n')
                 .append("observedTicks=").append(TICK_COUNT.get()).append('\n')
-                .append("lastCompletedTickMs=").append(LAST_TICK_NANOS.get() / 1_000_000L).append('\n')
-                .append("serverThread=").append(serverThread == null ? "not observed" : serverThread.getName()).append('\n')
+                .append("lastCompletedServerTickMs=").append(LAST_SERVER_TICK_NANOS.get() / 1_000_000L).append('\n')
+                .append("lastCompletedClientTickMs=").append(LAST_CLIENT_TICK_NANOS.get() / 1_000_000L).append('\n')
+                .append("serverThread=").append(threadName(serverThread)).append('\n')
+                .append("clientThread=").append(threadName(clientThread)).append('\n')
+                .append("triggerThread=").append(threadName(targetThread)).append('\n')
+                .append("triggerThreadId=").append(targetThread == null ? -1 : targetThread.getId()).append('\n')
                 .append("thresholdMs=").append(stallThresholdMs).append('\n');
 
         Runtime runtime = Runtime.getRuntime();
@@ -191,24 +238,29 @@ public final class WatchdogMonitor {
 
         out.append("\n[THREADS]\n");
         ThreadMXBean threadBean = ManagementFactory.getThreadMXBean();
-        long[] ids = threadBean.getAllThreadIds();
-        long serverThreadId = serverThread == null ? -1L : serverThread.getId();
-        long[] limitedIds = new long[Math.min(ids.length + (serverThreadId > 0 ? 1 : 0), 120)];
-        int selected = 0;
-        if (serverThreadId > 0) limitedIds[selected++] = serverThreadId;
-        for (long id : ids) {
-            if (selected >= limitedIds.length) break;
-            if (id != serverThreadId) limitedIds[selected++] = id;
-        }
-        if (selected != limitedIds.length) {
-            long[] trimmed = new long[selected];
-            System.arraycopy(limitedIds, 0, trimmed, 0, selected);
-            limitedIds = trimmed;
-        }
-        ThreadInfo[] infos = threadBean.getThreadInfo(limitedIds, true, true, stackDepth);
+        long[] allIds = threadBean.getAllThreadIds();
+        long targetId = targetThread == null ? -1L : targetThread.getId();
 
+        // Put the stalled thread first, then collect every live JVM thread.
+        long[] orderedIds = new long[allIds.length];
+        int selected = 0;
+        if (targetId > 0) orderedIds[selected++] = targetId;
+        for (long id : allIds) {
+            if (id != targetId) orderedIds[selected++] = id;
+        }
+        if (selected != orderedIds.length) {
+            long[] trimmed = new long[selected];
+            System.arraycopy(orderedIds, 0, trimmed, 0, selected);
+            orderedIds = trimmed;
+        }
+
+        // This overload captures stacks and basic lock-owner information without
+        // asking the JVM to enumerate every locked monitor/synchronizer.
+        ThreadInfo[] infos = threadBean.getThreadInfo(orderedIds, stackDepth);
+        int capturedThreads = 0;
         for (ThreadInfo info : infos) {
             if (info == null) continue;
+            capturedThreads++;
             out.append("\n--- ").append(info.getThreadName())
                     .append(" | id=").append(info.getThreadId())
                     .append(" | state=").append(info.getThreadState());
@@ -218,15 +270,17 @@ public final class WatchdogMonitor {
             for (StackTraceElement frame : info.getStackTrace()) {
                 out.append("    at ").append(frame).append('\n');
             }
-            if (info.getLockedMonitors().length > 0) {
-                out.append("    lockedMonitors=").append(info.getLockedMonitors().length).append('\n');
-            }
-            if (info.getLockedSynchronizers().length > 0) {
-                out.append("    lockedSynchronizers=").append(info.getLockedSynchronizers().length).append('\n');
-            }
         }
-        out.append("\n[END]\n");
+
+        out.append("\nthreadCount=").append(capturedThreads).append('\n')
+                .append("stackDepth=").append(stackDepth).append('\n')
+                .append("collectionDurationMs=").append((System.nanoTime() - captureStarted) / 1_000_000L).append('\n')
+                .append("\n[END]\n");
         return out.toString();
+    }
+
+    private static String threadName(Thread thread) {
+        return thread == null ? "not observed" : thread.getName();
     }
 
     private static void loadConfig() {
@@ -236,21 +290,21 @@ public final class WatchdogMonitor {
             Files.createDirectories(config.getParent());
             if (Files.notExists(config)) {
                 properties.setProperty("stallThresholdMs", "2000");
-                properties.setProperty("repeatIntervalMs", "5000");
-                properties.setProperty("maxDumpsPerStall", "20");
-                properties.setProperty("stackDepth", "48");
+                properties.setProperty("repeatIntervalMs", "2000");
+                properties.setProperty("maxDumpsPerStall", "8");
+                properties.setProperty("stackDepth", "32");
                 try (var writer = Files.newBufferedWriter(config, StandardCharsets.UTF_8,
                         StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)) {
-                    properties.store(writer, "SaveWatch 0.1.0 settings");
+                    properties.store(writer, "SaveWatch 0.2.0 settings");
                 }
             }
             try (var reader = Files.newBufferedReader(config, StandardCharsets.UTF_8)) {
                 properties.load(reader);
             }
             stallThresholdMs = boundedLong(properties, "stallThresholdMs", 2_000, 250, 60_000);
-            repeatIntervalMs = boundedLong(properties, "repeatIntervalMs", 5_000, 1_000, 60_000);
-            maxDumpsPerStall = (int) boundedLong(properties, "maxDumpsPerStall", 20, 1, 100);
-            stackDepth = (int) boundedLong(properties, "stackDepth", 48, 8, 128);
+            repeatIntervalMs = boundedLong(properties, "repeatIntervalMs", 2_000, 500, 60_000);
+            maxDumpsPerStall = (int) boundedLong(properties, "maxDumpsPerStall", 8, 1, 100);
+            stackDepth = (int) boundedLong(properties, "stackDepth", 32, 8, 128);
         } catch (IOException | RuntimeException exception) {
             LOGGER.warn("Could not load config/savewatch.properties; using safe defaults.", exception);
         }
