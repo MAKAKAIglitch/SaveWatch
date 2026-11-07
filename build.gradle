@@ -70,11 +70,11 @@ tasks.withType(Jar).configureEach {
     manifest {
         attributes([
                 'Specification-Title': mod_id,
-                'Specification-Vendor': 'Bzzz-craft',
+                'Specification-Vendor': 'SaveWatch contributors',
                 'Specification-Version': '1',
                 'Implementation-Title': project.name,
                 'Implementation-Version': project.version,
-                'Implementation-Vendor': 'Bzzz-craft'
+                'Implementation-Vendor': 'SaveWatch contributors'
         ])
     }
 }
