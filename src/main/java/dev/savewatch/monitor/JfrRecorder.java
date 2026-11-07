@@ -54,7 +54,11 @@ public final class JfrRecorder {
         }
 
         try {
-            recording.dump(destination);
+            // Copy the live rolling recording so exporting a diagnostic never stops
+            // the recorder and never creates a blind interval after the first stall.
+            try (Recording snapshot = recording.copy(false)) {
+                snapshot.dump(destination);
+            }
             lastDumpNanos = now;
             return destination.getFileName().toString();
         } catch (IOException | RuntimeException exception) {
