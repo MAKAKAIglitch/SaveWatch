@@ -9,7 +9,7 @@
 - Java: 21
 - Mod ID: `savewatch`
 
-## Features in 0.6.0
+## Features in 0.7.0
 
 ### Stall watchdog
 - Watches server ticks, client ticks, and render frames independently.
@@ -27,6 +27,13 @@
 - Labels results as strong signal, possible connection, or weak signal. These are heuristic confidence labels, never proof that a mod caused the stall.
 - Handles ambiguous classes/packages and multi-mod JARs conservatively; unreadable JARs do not stop snapshot collection.
 - Older 0.5.0 snapshots remain readable; their transformer-marker attribution is retained as a compatibility fallback.
+
+### Experimental memory leak analyzer (0.7.0)
+- Tracks retained heap growth after garbage-collection activity, preferring the JVM old-generation memory pool and falling back to total heap when unavailable.
+- Requires a sustained upward post-GC baseline across multiple samples, a minimum growth threshold, and significant heap occupancy before warning.
+- Sends a Russian chat warning and captures a diagnostic snapshot when a suspicious trend is detected; repeated warnings are rate-limited.
+- Configurable in-game through the standard NeoForge configuration screen, exposed in the vanilla Mods list and Better ModList (the NeoForge Mod Menu port). No dependency on either menu mod is required.
+- This is an experimental heuristic: long-lived caches, world loading, and legitimate workload growth can resemble a leak. Confirm with repeated reports/JFR and a controlled reproduction.
 
 ### JVM and thread diagnostics
 - Captures every live JVM thread, prioritizing the stalled thread.
@@ -57,7 +64,7 @@
 - `/savewatch ai` — regenerate compact AI-ready Markdown summary.
 - `/savewatch links` — show clickable local file links in chat.
 
-Defaults: 256 MiB log folder cap, Russian messages, 2-second stall threshold, 2-second interval between snapshots, maximum 20 snapshots per continuous stall, 32 stack frames per thread, JFR enabled with a 60-second rolling window, a 64 MiB recording cap, and the four newest exported JFR files.
+Memory analyzer defaults: enabled, chat alerts enabled, 30-second sample interval, 6 post-GC samples, 48 MiB minimum growth, 3% of maximum heap minimum growth, 60% minimum heap occupancy, and a 10-minute alert cooldown. Defaults: 256 MiB log folder cap, Russian messages, 2-second stall threshold, 2-second interval between snapshots, maximum 20 snapshots per continuous stall, 32 stack frames per thread, JFR enabled with a 60-second rolling window, a 64 MiB recording cap, and the four newest exported JFR files.
 
 ## Configuration
 
