@@ -75,7 +75,7 @@ public final class AiSummaryWriter {
             List<String> frames = triggerFrames(snapshots.get(0), latest.get("triggerThread"));
             if (!frames.isEmpty()) {
                 out.append("\n## Первые кадры потока-триггера\n");
-                for (String frame : frames) out.append("- `").append(frame).append("`\\n");
+                for (String frame : frames) out.append("- `").append(frame).append("`\n");
             }
         }
         out.append("\n## Как использовать\n")
