@@ -49,6 +49,20 @@ class AnalyzeReportsTests(unittest.TestCase):
         self.assertEqual(len(report.server_thread.frames), 2)
         self.assertEqual(len(report.gc_lines), 1)
 
+    def test_focuses_trigger_thread_for_render_stall(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "render-stall.txt"
+            path.write_text(
+                SAMPLE_REPORT.replace("reason=LONG_SERVER_TICK", "reason=LONG_RENDER_FRAME")
+                .replace("serverThread=Server thread", "serverThread=Server thread\\ntriggerThread=Render thread"),
+                encoding="utf-8",
+            )
+            report = parse_report(path)
+
+        self.assertIsNotNone(report.focus_thread)
+        self.assertEqual(report.focus_thread.name, "Render thread")
+        self.assertIn("Renderer.draw", render_summary([report], top=5))
+
     def test_summary_highlights_repeated_frames(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "snapshot.txt"
