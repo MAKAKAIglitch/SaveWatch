@@ -170,12 +170,12 @@ public final class WatchdogMonitor {
                             serverThread != null ? serverThread : (clientThread != null ? clientThread : renderThread));
                     if (queued) {
                         context.getSource().sendSuccess(
-                                () -> Component.literal("SaveWatch: diagnostic snapshot queued. Check logs/savewatch/."),
+                                () -> Component.literal("SaveWatch: диагностический дамп поставлен в очередь. Используй /savewatch links."),
                                 false);
                         return 1;
                     }
                     context.getSource().sendFailure(Component.literal(
-                            "SaveWatch: snapshot queue is full; try again in a moment."));
+                            "SaveWatch: очередь дампов заполнена, попробуй чуть позже."));
                     return 0;
                 }))
                 .then(Commands.literal("links").executes(context -> {
@@ -207,7 +207,7 @@ public final class WatchdogMonitor {
                 .then(Commands.literal("report").executes(context -> {
                     queueHtmlReport();
                     context.getSource().sendSuccess(
-                            () -> Component.literal("SaveWatch: HTML report queued. It will be saved to logs/savewatch/index.html."),
+                            () -> Component.literal("SaveWatch: HTML-отчёт поставлен в очередь. Открой его через /savewatch links."),
                             false);
                     return 1;
                 })));
