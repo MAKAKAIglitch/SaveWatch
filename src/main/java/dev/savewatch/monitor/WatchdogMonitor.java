@@ -66,6 +66,7 @@ public final class WatchdogMonitor {
     private static final AtomicBoolean STARTED = new AtomicBoolean();
     private static final AtomicBoolean REPORT_REQUESTED = new AtomicBoolean();
     private static final AtomicBoolean REPORT_WRITING = new AtomicBoolean();
+    private static final AtomicBoolean REPORT_SCHEDULER_RUNNING = new AtomicBoolean();
 
     private static volatile Thread serverThread;
     private static volatile Thread clientThread;
@@ -250,7 +251,7 @@ public final class WatchdogMonitor {
                     writeSnapshot(reason, tickDurationMs, trigger, targetThread);
                 } finally {
                     if ("MANUAL_COMMAND".equals(reason)) queueHtmlReport();
-                    else if (REPORT_REQUESTED.get()) startReportWorker();
+                    else if (REPORT_REQUESTED.get()) scheduleReportWorker();
                 }
             });
             return true;
@@ -390,7 +391,36 @@ public final class WatchdogMonitor {
     /** Queues an offline HTML report without doing filesystem work on a game thread. */
     private static void queueHtmlReport() {
         REPORT_REQUESTED.set(true);
-        startReportWorker();
+        scheduleReportWorker();
+    }
+
+    /**
+     * Waits off-thread until the snapshot queue is fully drained before starting
+     * the HTML generator. Calling it from a snapshot task's finally block would
+     * still see that task as active and could otherwise leave the report pending.
+     */
+    private static void scheduleReportWorker() {
+        if (!REPORT_SCHEDULER_RUNNING.compareAndSet(false, true)) return;
+        Thread scheduler = new Thread(() -> {
+            try {
+                while (!Thread.currentThread().isInterrupted()) {
+                    if (SNAPSHOT_WRITER.getActiveCount() == 0 && SNAPSHOT_WRITER.getQueue().isEmpty()) {
+                        startReportWorker();
+                        return;
+                    }
+                    Thread.sleep(50);
+                }
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+            } finally {
+                REPORT_SCHEDULER_RUNNING.set(false);
+                if (REPORT_REQUESTED.get() && SNAPSHOT_WRITER.getActiveCount() == 0
+                        && SNAPSHOT_WRITER.getQueue().isEmpty()) startReportWorker();
+            }
+        }, "SaveWatch Report Scheduler");
+        scheduler.setDaemon(true);
+        scheduler.setPriority(Thread.NORM_PRIORITY - 1);
+        scheduler.start();
     }
 
     private static void startReportWorker() {
