@@ -142,13 +142,13 @@ public final class HtmlReportGenerator {
         long deadlockedThreads = snapshots.stream()
                 .mapToLong(snapshot -> (long) value(snapshot, "deadlockedThreadCount", 0)).max().orElse(0);
         String assessment;
-        if (deadlockDetected) assessment = "Critical — JVM deadlock detected";
-        else if (longest >= threshold * 5.0) assessment = "Critical — very long stall captured";
+        if (deadlockDetected) assessment = "Критично — обнаружен deadlock JVM";
+        else if (longest >= threshold * 5.0) assessment = "Критично — зафиксировано очень долгое зависание";
         else if (longest >= threshold || (heapMax > 0 && heapUsed / heapMax >= .90))
-            assessment = "Attention — threshold exceeded";
+            assessment = "Внимание — превышен порог зависания";
         else if (snapshots.stream().anyMatch(s -> s.values.getOrDefault("reason", "").startsWith("LONG_")))
-            assessment = "Attention — long event recorded";
-        else assessment = "No long stall in these snapshots";
+            assessment = "Внимание — записано длительное событие";
+        else assessment = "В этих дампах долгих зависаний нет";
 
         StringBuilder out = new StringBuilder(64_000);
         out.append("<!doctype html><html lang=\"ru\"><head><meta charset=\"utf-8\">")
@@ -157,16 +157,16 @@ public final class HtmlReportGenerator {
                 .append("<header><div><h1>SaveWatch</h1><p>Локальный диагностический отчёт</p></div>")
                 .append("<nav><a href=\"#timeline\">События</a><a href=\"#mods\">Моды</a><a href=\"#dumps\">Дампы потоков</a><a href=\"ai-summary.md\">AI-сводка</a></nav></header>")
                 .append("<section class=\"cards\">")
-                .append(card("Overall assessment", assessment))
-                .append(card("Snapshots", Integer.toString(snapshots.size())))
-                .append(card("Longest tick / frame", longest < 0 ? "—" : format(longest) + " ms"))
-                .append(card("Latest heap used", heapUsed < 0 ? "—" : format(heapUsed) + " MiB"))
-                .append(card("Latest trigger", latest.values.getOrDefault("reason", "—")))
-                .append(card("Deadlocked threads", Long.toString(deadlockedThreads)))
-                .append(card("JFR capture", latest.values.getOrDefault("jfrFile", "unavailable")))
+                .append(card("Общая оценка", assessment))
+                .append(card("Дампов", Integer.toString(snapshots.size())))
+                .append(card("Самое долгое событие", longest < 0 ? "—" : format(longest) + " ms"))
+                .append(card("Использовано памяти", heapUsed < 0 ? "—" : format(heapUsed) + " MiB"))
+                .append(card("Последний триггер", latest.values.getOrDefault("reason", "—")))
+                .append(card("Потоков в deadlock", Long.toString(deadlockedThreads)))
+                .append(card("Запись JFR", latest.values.getOrDefault("jfrFile", "unavailable")))
                 .append("</section>")
                 .append("<h2>Память и сборщик мусора</h2><div class=\"grid\">")
-                .append("<section class=\"panel\"><h3>Использование памяти</h3><canvas id=\"heap\" class=\"chart\"></canvas><p>Heap used / maximum, MiB.</p></section>")
+                .append("<section class=\"panel\"><h3>Использование памяти</h3><canvas id=\"heap\" class=\"chart\"></canvas><p>Использовано / максимум heap, МиБ.</p></section>")
                 .append("<section class=\"panel\"><h3>Суммарное время GC</h3><canvas id=\"gc\" class=\"chart\"></canvas><p>Накопительный счётчик JVM.</p></section>")
                 .append("<section class=\"panel\"><h3>MSPT сервера</h3><canvas id=\"mspt\" class=\"chart\"></canvas><p>Среднее и максимум времени тика.</p></section>")
                 .append("<section class=\"panel\"><h3>TPS сервера</h3><canvas id=\"tps\" class=\"chart\"></canvas><p>Расчётная частота тиков, максимум 20 TPS.</p></section>")
@@ -187,9 +187,9 @@ public final class HtmlReportGenerator {
                     .append(" lines</div></div><div><b>").append(duration).append("</b><div class=\"muted\">")
                     .append(escape(trigger)).append("</div></div></div>");
         }
-        out.append("</div><h2>Stack comparison</h2><section class=\"panel\">");
+        out.append("</div><h2>Сравнение стеков</h2><section class=\"panel\">");
         if (snapshots.size() < 2) {
-            out.append("<p>At least two snapshots are needed for stack comparison.</p>");
+            out.append("<p>Для сравнения стеков нужны минимум два дампа.</p>");
         } else {
             for (int i = 1; i < snapshots.size(); i++) {
                 Set<String> before = frameSet(snapshots.get(i - 1).focus);
@@ -205,14 +205,14 @@ public final class HtmlReportGenerator {
                         .append(shared.size()).append(" shared).</p>");
             }
         }
-        out.append("</section><h2 id=\"mods\">Potentially involved mods</h2><section class=\"panel\">")
-                .append("<p>Sorted by appearances in the trigger thread. These are investigation clues, not proof of responsibility.</p>")
+        out.append("</section><h2 id=\"mods\">Возможные участники — моды</h2><section class=\"panel\">")
+                .append("<p>Сортировка по встречаемости в потоке-триггере. Это зацепки для проверки, а не доказательство вины.</p>")
                 .append("<table><thead><tr><th>Mod ID</th><th>Trigger stack hits</th><th>All-thread hits</th><th>Exact frame</th></tr></thead><tbody>");
 
         List<ModHit> sortedМоды = mods.values().stream().filter(hit -> hit.trigger > 0)
                 .sorted(Comparator.comparingInt((ModHit hit) -> hit.trigger).reversed()).toList();
         if (sortedМоды.isEmpty()) {
-            out.append("<tr><td colspan=\"4\" class=\"muted\">No mod package identifiers found in trigger-thread stacks.</td></tr>");
+            out.append("<tr><td colspan=\"4\" class=\"muted\">В стеке потока-триггера не найдены пакеты модов.</td></tr>");
         } else {
             for (ModHit hit : sortedМоды) {
                 out.append("<tr><td><code>").append(escape(hit.id)).append("</code></td><td>")
@@ -221,7 +221,7 @@ public final class HtmlReportGenerator {
             }
         }
         out.append("</tbody></table></section><h2 id=\"dumps\">Дампы потоков</h2>")
-                .append("<p>Expand a thread to inspect its stack. Line links point to the exact captured frame.</p>");
+                .append("<p>Раскрой поток, чтобы посмотреть стек. Ссылки ведут к конкретным кадрам.</p>");
 
         for (int reportIndex = 0; reportIndex < snapshots.size(); reportIndex++) {
             Snapshot snapshot = snapshots.get(reportIndex);
@@ -284,7 +284,7 @@ public final class HtmlReportGenerator {
                     .append(",tps:").append(jsonNumber(snapshot.values.get("serverTps"))).append('}');
         }
         out.append("];")
-                .append("function draw(id,key,maxKey,suffix){const c=document.getElementById(id),x=c.getContext('2d'),w=c.clientWidth,h=c.clientHeight,d=devicePixelRatio||1;c.width=w*d;c.height=h*d;x.scale(d,d);x.strokeStyle='#34445f';x.fillStyle='#93a4bd';x.font='11px system-ui';x.beginPath();x.moveTo(36,10);x.lineTo(36,h-26);x.lineTo(w-8,h-26);x.stroke();const vals=data.map(v=>v[key]).filter(v=>v!==null);if(!vals.length){x.fillText('No data in snapshots',46,40);return}const max=Math.max(1,...data.map(v=>v[maxKey]??v[key]??0));x.strokeStyle='#78a9ff';x.lineWidth=2;x.beginPath();let started=false;data.forEach((v,i)=>{if(v[key]===null){started=false;return}const px=42+(w-54)*(i/Math.max(1,data.length-1)),py=h-28-(h-44)*(v[key]/max);if(!started){x.moveTo(px,py);started=true}else x.lineTo(px,py)});x.stroke();x.fillStyle='#93a4bd';x.fillText('0',12,h-25);x.fillText(Math.round(max)+suffix,4,14)}")
+                .append("function draw(id,key,maxKey,suffix){const c=document.getElementById(id),x=c.getContext('2d'),w=c.clientWidth,h=c.clientHeight,d=devicePixelRatio||1;c.width=w*d;c.height=h*d;x.scale(d,d);x.strokeStyle='#34445f';x.fillStyle='#93a4bd';x.font='11px system-ui';x.beginPath();x.moveTo(36,10);x.lineTo(36,h-26);x.lineTo(w-8,h-26);x.stroke();const vals=data.map(v=>v[key]).filter(v=>v!==null);if(!vals.length){x.fillText('В дампах нет данных',46,40);return}const max=Math.max(1,...data.map(v=>v[maxKey]??v[key]??0));x.strokeStyle='#78a9ff';x.lineWidth=2;x.beginPath();let started=false;data.forEach((v,i)=>{if(v[key]===null){started=false;return}const px=42+(w-54)*(i/Math.max(1,data.length-1)),py=h-28-(h-44)*(v[key]/max);if(!started){x.moveTo(px,py);started=true}else x.lineTo(px,py)});x.stroke();x.fillStyle='#93a4bd';x.fillText('0',12,h-25);x.fillText(Math.round(max)+suffix,4,14)}")
                 .append("draw('heap','heap','heapMax',' МиБ');draw('gc','gc','gc',' мс');draw('mspt','mspt','msptMax',' мс');draw('fps','fps','fps',' FPS');draw('tps','tps','tps',' TPS');")
                 .append("function reveal(){const e=document.getElementById(decodeURIComponent(location.hash.slice(1)));if(e){e.closest('details')?.setAttribute('open','');e.scrollIntoView({block:'center'})}}")
                 .append("addEventListener('hashchange',reveal);reveal();</script></main></body></html>");
