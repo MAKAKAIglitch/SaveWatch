@@ -14,6 +14,8 @@ import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.Arrays;
+import java.util.Locale;
 import java.util.Properties;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.RejectedExecutionException;
@@ -21,6 +23,7 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicLongArray;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.network.chat.Component;
@@ -45,6 +48,10 @@ public final class WatchdogMonitor {
     private static final AtomicLong LAST_RENDER_FRAME_NANOS = new AtomicLong();
     private static final AtomicLong TICK_COUNT = new AtomicLong();
     private static final AtomicLong SNAPSHOT_SEQUENCE = new AtomicLong();
+    private static final AtomicLong SERVER_HISTORY_INDEX = new AtomicLong();
+    private static final AtomicLong RENDER_HISTORY_INDEX = new AtomicLong();
+    private static final AtomicLongArray SERVER_TICK_HISTORY = new AtomicLongArray(100);
+    private static final AtomicLongArray RENDER_FRAME_HISTORY = new AtomicLongArray(120);
 
     // A bounded serial queue prevents simultaneous server/client/render stalls from
     // silently discarding snapshots while keeping all filesystem work off game threads.
@@ -104,7 +111,11 @@ public final class WatchdogMonitor {
 
     public static void onServerTickPost(ServerTickEvent.Post event) {
         long started = SERVER_TICK_STARTED_NANOS.getAndSet(0);
-        if (started != 0) LAST_SERVER_TICK_NANOS.set(System.nanoTime() - started);
+        if (started != 0) {
+            long duration = System.nanoTime() - started;
+            LAST_SERVER_TICK_NANOS.set(duration);
+            recordTiming(SERVER_TICK_HISTORY, SERVER_HISTORY_INDEX, duration);
+        }
         LAST_SERVER_DUMP_NANOS.set(0);
         if (SERVER_DUMPS_THIS_STALL.getAndSet(0) > 0) queueHtmlReport();
     }
@@ -131,7 +142,11 @@ public final class WatchdogMonitor {
 
     public static void onRenderFramePost() {
         long started = RENDER_FRAME_STARTED_NANOS.getAndSet(0);
-        if (started != 0) LAST_RENDER_FRAME_NANOS.set(System.nanoTime() - started);
+        if (started != 0) {
+            long duration = System.nanoTime() - started;
+            LAST_RENDER_FRAME_NANOS.set(duration);
+            recordTiming(RENDER_FRAME_HISTORY, RENDER_HISTORY_INDEX, duration);
+        }
         LAST_RENDER_DUMP_NANOS.set(0);
         if (RENDER_DUMPS_THIS_STALL.getAndSet(0) > 0) queueHtmlReport();
     }
@@ -223,6 +238,49 @@ public final class WatchdogMonitor {
         return startedNanos == 0 ? 0 : Math.max(0, (nowNanos - startedNanos) / 1_000_000L);
     }
 
+    private static void recordTiming(AtomicLongArray history, AtomicLong index, long durationNanos) {
+        long slot = index.getAndIncrement();
+        history.set((int) (slot % history.length()), durationNanos);
+    }
+
+    private static long[] timingSamples(AtomicLongArray history) {
+        long[] samples = new long[history.length()];
+        int count = 0;
+        for (int i = 0; i < history.length(); i++) {
+            long value = history.get(i);
+            if (value > 0) samples[count++] = value;
+        }
+        return Arrays.copyOf(samples, count);
+    }
+
+    private static String serverTimingSummary() {
+        long[] samples = timingSamples(SERVER_TICK_HISTORY);
+        if (samples.length == 0) return " | TPS/MSPT=warming up";
+        Arrays.sort(samples);
+        double totalMs = 0;
+        for (long sample : samples) totalMs += sample / 1_000_000.0;
+        double averageMs = totalMs / samples.length;
+        double p95Ms = samples[Math.max(0, (int) Math.ceil(samples.length * 0.95) - 1)] / 1_000_000.0;
+        double maxMs = samples[samples.length - 1] / 1_000_000.0;
+        double tps = averageMs <= 0 ? 20.0 : Math.min(20.0, 1_000.0 / averageMs);
+        return String.format(Locale.ROOT, " | TPS=%.1f | MSPT avg/p95/max=%.1f/%.1f/%.1f (%d ticks)",
+                tps, averageMs, p95Ms, maxMs, samples.length);
+    }
+
+    private static String renderTimingSummary() {
+        long[] samples = timingSamples(RENDER_FRAME_HISTORY);
+        if (samples.length == 0) return " | FPS/frame=warming up";
+        Arrays.sort(samples);
+        double totalMs = 0;
+        for (long sample : samples) totalMs += sample / 1_000_000.0;
+        double averageMs = totalMs / samples.length;
+        double p99Ms = samples[Math.max(0, (int) Math.ceil(samples.length * 0.99) - 1)] / 1_000_000.0;
+        double averageFps = averageMs <= 0 ? 0 : 1_000.0 / averageMs;
+        double lowOnePercentFps = p99Ms <= 0 ? 0 : 1_000.0 / p99Ms;
+        return String.format(Locale.ROOT, " | FPS avg/1%% low=%.1f/%.1f | frame p99=%.1fms (%d frames)",
+                averageFps, lowOnePercentFps, p99Ms, samples.length);
+    }
+
     private static String statusText() {
         Runtime runtime = Runtime.getRuntime();
         long used = runtime.totalMemory() - runtime.freeMemory();
@@ -240,6 +298,8 @@ public final class WatchdogMonitor {
                 + (currentClientMs > 0 ? " | current client tick=" + currentClientMs + "ms" : "")
                 + (currentRenderMs > 0 ? " | current render frame=" + currentRenderMs + "ms" : "")
                 + " | snapshot queue=" + SNAPSHOT_WRITER.getQueue().size()
+                + serverTimingSummary()
+                + renderTimingSummary()
                 + " | heap used=" + formatMiB(used) + " MiB"
                 + " | heap max=" + formatMiB(runtime.maxMemory()) + " MiB";
     }
