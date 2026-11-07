@@ -143,12 +143,17 @@ public final class WatchdogMonitor {
                     return 1;
                 }))
                 .then(Commands.literal("dump").executes(context -> {
-                    queueSnapshot("MANUAL_COMMAND", currentTickDurationMs(), "command",
+                    boolean queued = queueSnapshot("MANUAL_COMMAND", currentTickDurationMs(), "command",
                             serverThread != null ? serverThread : (clientThread != null ? clientThread : renderThread));
-                    context.getSource().sendSuccess(
-                            () -> Component.literal("SaveWatch: diagnostic snapshot queued. Check logs/savewatch/."),
-                            false);
-                    return 1;
+                    if (queued) {
+                        context.getSource().sendSuccess(
+                                () -> Component.literal("SaveWatch: diagnostic snapshot queued. Check logs/savewatch/."),
+                                false);
+                        return 1;
+                    }
+                    context.getSource().sendFailure(Component.literal(
+                            "SaveWatch: snapshot queue is full; try again in a moment."));
+                    return 0;
                 }))
                 .then(Commands.literal("report").executes(context -> {
                     queueHtmlReport();
@@ -212,18 +217,27 @@ public final class WatchdogMonitor {
                 LAST_RENDER_FRAME_NANOS.get()) / 1_000_000L;
     }
 
+    private static long activeDurationMs(long startedNanos, long nowNanos) {
+        return startedNanos == 0 ? 0 : Math.max(0, (nowNanos - startedNanos) / 1_000_000L);
+    }
+
     private static String statusText() {
         Runtime runtime = Runtime.getRuntime();
         long used = runtime.totalMemory() - runtime.freeMemory();
         boolean inServerTick = SERVER_TICK_STARTED_NANOS.get() != 0;
         boolean inClientTick = CLIENT_TICK_STARTED_NANOS.get() != 0;
-        return "SaveWatch 0.3.0 | observed server ticks=" + TICK_COUNT.get()
+        long now = System.nanoTime();
+        long currentServerMs = activeDurationMs(SERVER_TICK_STARTED_NANOS.get(), now);
+        long currentClientMs = activeDurationMs(CLIENT_TICK_STARTED_NANOS.get(), now);
+        long currentRenderMs = activeDurationMs(RENDER_FRAME_STARTED_NANOS.get(), now);
+        return "SaveWatch 0.4.0 | observed server ticks=" + TICK_COUNT.get()
                 + " | last server tick=" + LAST_SERVER_TICK_NANOS.get() / 1_000_000L + "ms"
                 + " | last client tick=" + LAST_CLIENT_TICK_NANOS.get() / 1_000_000L + "ms"
                 + " | last render frame=" + LAST_RENDER_FRAME_NANOS.get() / 1_000_000L + "ms"
-                + (inServerTick ? " | current tick=" + currentTickDurationMs() + "ms" : "")
-                + (inClientTick ? " | client tick active" : "")
-                + (RENDER_FRAME_STARTED_NANOS.get() != 0 ? " | current render frame=" + currentTickDurationMs() + "ms" : "")
+                + (currentServerMs > 0 ? " | current server tick=" + currentServerMs + "ms" : "")
+                + (currentClientMs > 0 ? " | current client tick=" + currentClientMs + "ms" : "")
+                + (currentRenderMs > 0 ? " | current render frame=" + currentRenderMs + "ms" : "")
+                + " | snapshot queue=" + SNAPSHOT_WRITER.getQueue().size()
                 + " | heap used=" + formatMiB(used) + " MiB"
                 + " | heap max=" + formatMiB(runtime.maxMemory()) + " MiB";
     }
@@ -427,14 +441,15 @@ public final class WatchdogMonitor {
                 properties.setProperty("configVersion", "3");
                 try (var writer = Files.newBufferedWriter(config, StandardCharsets.UTF_8,
                         StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)) {
-                    properties.store(writer, "SaveWatch 0.3.0 settings");
+                    properties.store(writer, "SaveWatch 0.4.0 settings");
                 }
             }
             try (var reader = Files.newBufferedReader(config, StandardCharsets.UTF_8)) {
                 properties.load(reader);
             }
 
-            // Migrate untouched 0.1.0 defaults while preserving user-customized values.
+            // Add new settings without overwriting values customized by the user.
+            boolean configChanged = false;
             if (!properties.containsKey("configVersion")) {
                 if ("5000".equals(properties.getProperty("repeatIntervalMs"))) {
                     properties.setProperty("repeatIntervalMs", "2000");
@@ -442,10 +457,28 @@ public final class WatchdogMonitor {
                 if ("48".equals(properties.getProperty("stackDepth"))) {
                     properties.setProperty("stackDepth", "32");
                 }
-                properties.setProperty("configVersion", "2");
+                configChanged = true;
+            }
+            if (!properties.containsKey("jfrEnabled")) {
+                properties.setProperty("jfrEnabled", "true");
+                configChanged = true;
+            }
+            if (!properties.containsKey("jfrMaxAgeSeconds")) {
+                properties.setProperty("jfrMaxAgeSeconds", "60");
+                configChanged = true;
+            }
+            if (!properties.containsKey("jfrMaxSizeMiB")) {
+                properties.setProperty("jfrMaxSizeMiB", "64");
+                configChanged = true;
+            }
+            if (!"3".equals(properties.getProperty("configVersion"))) {
+                properties.setProperty("configVersion", "3");
+                configChanged = true;
+            }
+            if (configChanged) {
                 try (var writer = Files.newBufferedWriter(config, StandardCharsets.UTF_8,
                         StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE)) {
-                    properties.store(writer, "SaveWatch 0.3.0 settings");
+                    properties.store(writer, "SaveWatch 0.4.0 settings");
                 }
             }
 
