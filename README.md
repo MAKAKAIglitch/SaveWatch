@@ -67,7 +67,9 @@ The mod itself is written in Java because it runs inside the NeoForge JVM. Pytho
 
 - `tools/analyze_reports.py` summarizes snapshots, groups repeated frames from the thread that triggered each snapshot, and reports tick-duration statistics.
 - It uses only the Python standard library; Python is not required to install or run the Minecraft mod.
-- On Windows, run `analyze.bat logs\\savewatch`.
+- On Windows, run `analyze.bat logs\\savewatch` for the Markdown summary.
+- Run `report.bat` to generate `logs/savewatch/index.html` and open it in your browser. The HTML report is self-contained and works offline; it includes a stall timeline, heap/GC charts, stack comparison, potential mod clues, and expandable thread dumps with direct frame links.
+- Or run `py -3 tools/report_html.py logs\\savewatch --open`.
 - Run its tests with `py -3 -m unittest discover -s tests -v`.
 
 ## Diagnostic limitations
